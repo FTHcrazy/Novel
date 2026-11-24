@@ -1,0 +1,935 @@
+/* 大纲面板：卷 / 章节 / 伏笔（NL 设计稿 §3·大纲）
+ *
+ * 本面板的按钮一律是 antd `Button`（AGENTS 6.1.2）：自带造型的先用 widget 的
+ * 「清零点」mixin 把组件级变量归零，再声明自己的外观。
+ * 状态样式只写变量、不写 :hover / :active / :disabled 属性规则——
+ * antd 的状态选择器（.ant-btn-color-default.ant-btn-variant-outlined:not(:disabled):hover）
+ * 是 (0,4,0)，自写属性压不过；持久高亮态（.is-active / .is-resolved）同理写默认变量。
+ */
+@use "../../../../../../shared/styles/widget" as widget;
+
+.nv-outline {
+  display: flex;
+  flex-direction: column;
+  /* 作为右栏滚动区的唯一子项：允许被压到比内容更窄（否则 nowrap 内容会从
+     这里把整个面板顶宽） */
+  min-width: 0;
+  /* 撑满右栏滚动区，把剩余高度分给下方的虚拟列表。
+     父级 .nv-panel__scroll 是 flex column + overflow-y: auto，
+     这里必须同时给 flex: 1 与 min-height: 0 才能拿到**确定高度** ——
+     虚拟列表（Virtuoso）依赖容器有确切高度，只靠内容撑高会塌成 0。 */
+  flex: 1;
+  min-height: 0;
+
+  /* 虚拟化章节列表：占满 summary / switch 之外的剩余高度，自身滚动。
+     > div 是 Virtuoso 的内部滚动容器，需一并撑满。 */
+  &__vlist {
+    flex: 1;
+    min-height: 0;
+
+    > div {
+      height: 100%;
+    }
+  }
+
+  &__summary {
+    display: grid;
+    /* ⚠️ 必须写 minmax(0, 1fr)，不能只写 1fr：`1fr` 等价 `minmax(auto, 1fr)`，
+       下限取 tile 的 min-content（nowrap 文案「待回收伏笔」≈80px），面板拖窄到
+       280px 时轨道 > 可用宽度 → 面板横向溢出。多列网格同理（见 §溢出防护）。 */
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 12px;
+
+    div {
+      min-width: 0;
+      padding: 8px 10px;
+      border: 1px solid var(--app-border);
+      border-radius: var(--app-radius-item);
+      background: var(--app-surface);
+    }
+
+    b {
+      display: block;
+      font-size: 16px;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.3;
+    }
+
+    span {
+      font-size: 12px;
+      color: var(--app-text-secondary-strong);
+    }
+
+    div.is-warn b {
+      color: var(--app-warning);
+    }
+  }
+
+  &__switch {
+    margin-bottom: 10px;
+  }
+
+  &__filter {
+    margin-bottom: 10px;
+  }
+
+  /* ── 卷 ───────────────────────────────────────────────────────── */
+  /* 伏笔子视图的滚动容器：与虚拟列表同样的「占满剩余高度 + 自身滚动」，
+     因为外层 scroll 已对本面板关闭（见 SupportPanel 的 flatScroll） */
+  &__fswrap {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+  }
+
+  &__vol {
+    margin-bottom: 10px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  &__vol-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0 4px;
+  }
+
+  /* 卷头整行（折叠开关）：清零后只声明自己要的外观，hover 背景走变量 */
+  &__vol-toggle.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: auto;
+    --ant-button-padding-inline: 4px;
+    --ant-button-content-font-size: 12px;
+    --ant-button-font-weight: 600;
+    --ant-border-radius: 8px;
+    --ant-button-default-color: var(--app-text);
+    --ant-button-default-hover-bg: var(--app-surface-hover);
+    --ant-button-default-active-bg: var(--app-surface-hover);
+    --ant-button-default-shadow: none;
+
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-block: 6px;
+    text-align: left;
+    transition: background var(--app-t-fast) var(--app-ease-standard);
+  }
+
+  &__vol-chev {
+    flex: none;
+    font-size: 12px;
+    color: var(--app-text-disabled);
+    transition: transform var(--app-t-slow) var(--app-ease-standard);
+  }
+
+  &__vol.is-fold &__vol-chev {
+    transform: rotate(-90deg);
+  }
+
+  &__vol-title {
+    /* 卷名可长：允许收缩 + 省略号，不再 flex: none 顶宽整行 */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__vol-note {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--app-text-secondary-strong);
+  }
+
+  &__vol-count {
+    margin-left: auto;
+    flex: none;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--app-text-secondary-strong);
+  }
+
+  &__vol-pill {
+    flex: none;
+    padding: 0 6px;
+    border-radius: var(--app-radius-pill);
+    background: var(--app-warning-weak);
+    color: var(--app-warning);
+    font-size: 12px;
+  }
+
+  /* 卷头「＋ 伏笔」图标按钮：hover 的描边色改写成 --ant-button-default-hover-color */
+  &__vol-add.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: 24px;
+    --ant-button-padding-inline: 0px;
+    --ant-border-radius: 7px;
+    --ant-button-default-color: var(--app-text-disabled);
+    --ant-button-default-hover-bg: var(--app-surface-hover);
+    --ant-button-default-hover-color: var(--app-primary);
+    --ant-button-default-active-bg: var(--app-surface-hover);
+    --ant-button-default-active-color: var(--app-primary);
+    --ant-button-default-shadow: none;
+
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    transition: background var(--app-t-fast) var(--app-ease-standard), color var(--app-t-fast) var(--app-ease-standard);
+  }
+
+  &__vol-list {
+    display: grid;
+    /* ⚠️ 单列网格的隐式轨道是 `auto` = max-content：章节梗概按钮带着 antd 的
+       `white-space: nowrap`，max-content 是整句话宽度（实测 482px > 面板内容宽
+       435px）→ 轨道被撑到 482px，章节行 width:100% 跟着变 482px → 面板横向
+       溢出 39px。此时点中章节会让浏览器把未完全可见的行 focus-scroll 进视口，
+       整个内容左移、首个统计 tile 的文字被裁到面板外（表现为「拉伸后布局错乱」）。
+       显式给轨道 0 下限，轨道才能收在容器宽度内。 */
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    padding-left: 4px;
+  }
+
+  &__vol.is-fold &__vol-list {
+    display: none;
+  }
+
+  &__hint {
+    margin: 0;
+    padding: 4px 6px 6px;
+    font-size: 12px;
+    color: var(--app-text-disabled);
+  }
+
+  /* ── 章节行 ───────────────────────────────────────────────────── */
+  &__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  &__item {
+    position: relative;
+    min-width: 0;
+    margin-bottom: 2px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  /* 章节行的行容器：只承载「一行」的底色 / 描边 / hover 态，本身不可点。
+     因为这一行有两个并列的真按钮（整行跳转 + 旗标标识），而 <button> 里不能
+     再放 <button>（浏览器会拆坏 DOM，React 不报错）→ 外壳必须落到行容器上。
+     行尾的字数与状态点也放在这里（纯文本不是控件），这样有没有标识的行
+     都在同一条竖线上收口。保留 1px 透明边框占位，激活时描边不引起位移。
+
+     ⚠️ 必须显式 box-sizing: border-box：应用没有全局 box-sizing 重置，
+     普通 div 默认 content-box —— width: 100% + padding-inline-end: 34px +
+     border 1px 会比容器宽出 36px。虚拟化后行挂在 Virtuoso 的滚动容器里
+     （overflow-y: auto 连带 overflow-x: auto），这 36px 直接变成横向滚动条、
+     行的高亮框右侧被裁 —— 表现为「标题宽度不自适应」。
+     （antd 按钮由 ant-button-reset 的 border-box 兜住，普通 div 得自己声明。） */
+  &__line {
+    box-sizing: border-box;
+    /* 定位上下文：行尾悬停浮现的「＋伏笔」绝对定位相对这里，
+       才能用 top:50% 相对行高垂直居中（li 还包含下方梗概文本） */
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    /* 右侧留出 __row-add（悬停浮现的「＋伏笔」，绝对定位 right: 4px、20px 宽）
+       的槽位 + 8px 呼吸位：不留的话它会压住行尾的状态点与旗标标识（这是本轮
+       之前就有的重叠，只是标识原先在行中间，看不出来） */
+    padding-inline-end: 34px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    transition: background var(--app-t-fast) var(--app-ease-standard), border-color var(--app-t-fast) var(--app-ease-standard);
+
+    &:hover {
+      background: var(--app-surface-hover);
+    }
+  }
+
+  /* 章节行「＋伏笔」入口：悬停浮现、相对行高垂直居中（挂在 __line 里，
+     见 JSX 注释；不能嵌进整行按钮 —— §6.1.2 第 4 条）；
+     表单内联在本章下方，见 renderChapter。
+     默认色用 primary 而不是 text-disabled：激活行的底色本就是浅橙，
+     灰色加号压在上面几乎看不见（用户反馈「很不显眼」），主色在明暗主题
+     下都与高亮底拉开对比，且「添加」动词语义上就该是主色 */
+  &__row-add.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: 20px;
+    --ant-button-padding-inline: 0px;
+    --ant-border-radius: 6px;
+    --ant-button-default-color: var(--app-primary);
+    --ant-button-default-hover-bg: var(--app-surface-hover);
+    --ant-button-default-hover-color: var(--app-primary);
+    --ant-button-default-active-bg: var(--app-surface-hover);
+    --ant-button-default-active-color: var(--app-primary);
+    --ant-button-default-shadow: none;
+
+    position: absolute;
+    /* 相对 __line（行容器）垂直居中：top:5px 挂在 li 上时会被下方
+       梗概文本拉偏（用户反馈「没有垂直居中」），50% + translateY 不挑行高 */
+    top: 50%;
+    transform: translateY(-50%);
+    right: 4px;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    opacity: 0;
+    transition: opacity var(--app-t-fast) var(--app-ease-standard), background var(--app-t-fast) var(--app-ease-standard), color var(--app-t-fast) var(--app-ease-standard);
+
+    & > svg,
+    & > .anticon {
+      width: 11px;
+      height: 11px;
+      font-size: 12px;
+    }
+  }
+
+  &__item:hover &__row-add.ant-btn,
+  &__row-add.ant-btn:focus-visible {
+    opacity: 1;
+  }
+
+  /* 章节整行（点即跳转）：外壳（底色 / 描边 / hover）已上移到 __line，
+     这里只当行容器里的第一个 flex 子项 —— 外观一律留空，避免两层底色叠起来；
+     右侧内边距归零，行尾留白由行容器的 gap 给 */
+  &__row.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: auto;
+    --ant-button-padding-inline: 8px 0px;
+    --ant-button-content-font-size: 14px;
+    --ant-border-radius: 9px;
+    --ant-button-default-color: var(--app-text-strong);
+    /* antd 焦点环的宽度变量（实测 cream 主题下是 3px 实色描边）。
+       必须在变量层清零：antd 的 :focus-visible 规则由 cssinjs 运行时注入、
+       晚于打包 CSS，属性级 outline:none 同特异性必输（踩过）；
+       变量级覆盖不参与这场竞争 —— antd 规则照常命中，只是解析成 0 宽。
+
+       注：这一条清的是**键盘焦点环**，与被用户三连报的「点击效果只有
+       一半」无关 —— 那条的成因是 antd wave 涟漪，见下方 .ant-wave 规则。
+       两者形状相近（都贴着 __row 按钮），此前误判过一次，留此备查。 */
+    --ant-line-width-focus: 0px;
+
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-block: 7px;
+    text-align: left;
+
+    /* 焦点环的实际清零靠上面的 --ant-line-width-focus 变量（属性级
+       outline:none 在真实应用里赢不了 cssinjs 的注入顺序，留作双保险）。
+       键盘焦点环改画在整行容器上（见下一条），与 hover/active 同形状。
+       同样地：这里处理的是键盘 Tab 焦点，不是鼠标点击 —— 点击反馈见
+       下方的 .ant-wave 规则 */
+    .nv-outline__line &:focus-visible {
+      outline: none;
+    }
+  }
+
+  /* 点击涟漪（antd wave）必须在这颗按钮上关掉 —— 它就是「点击效果只有一半」。
+     antd 把 `.ant-wave` **插进被点的按钮里**（_util/wave/WaveEffect.js：
+     `target.insertBefore(holder, target.firstChild)`），规则是
+     `box-shadow: 0 0 0 6px currentcolor; opacity: .2`（currentcolor = 主色，
+     实测 cream 主题即 #e8834a）；更糟的是 `opacity` 的过渡长达 **2s**
+     （box-shadow 0.4s 长到 6px，opacity 2s 才淡出）→ 点完一行后能挂两秒，
+     所以截图必然拍得到。
+
+     本行的按钮只是「整行里的透明一段」：行尾的伏笔标识 / 字数 / 状态点 /
+     ＋伏笔 都在按钮**外面**（并列真按钮，见 JSX 注释）。于是这圈环只罩住
+     标题那截，与行容器的整行高亮（is-active 的底 + 描边）叠在一起，就是
+     用户看到的「内层框 / 点击效果只有一半」。
+     整行的点击反馈已由 __line 的 :hover 与 is-active 高亮承担（覆盖整行、
+     也覆盖行尾那些标识），涟漪在这里只剩误导，直接不渲染。
+     注：跳章面板 / 右键菜单 / 工具卡的按钮**本身就是整个可点区域**，
+     涟漪环绕它们属于 antd 的正常观感，不要照搬这条。 */
+  &__row.ant-btn .ant-wave {
+    display: none;
+  }
+
+  /* 键盘焦点环：整行化。:has() 特异性含参数最高项（0,4,0），
+     稳压 antd 的 .ant-btn:not(:disabled):focus-visible（0,3,0） */
+  &__line:has(.nv-outline__row.ant-btn:focus-visible) {
+    outline: 2px solid var(--app-primary);
+    outline-offset: 1px;
+  }
+
+  /* 当前章：持久高亮态 → 外壳写在行容器上，行按钮只跟文字色
+     （按钮自己透明，行容器的高亮才会连旗标标识一起罩住） */
+  &__item.is-active &__line {
+    background: var(--app-primary-weak);
+    border-color: var(--app-primary);
+  }
+
+  &__item.is-active &__row.ant-btn {
+    --ant-button-default-color: var(--app-primary);
+    --ant-button-default-hover-color: var(--app-primary);
+    --ant-button-default-active-color: var(--app-primary);
+  }
+
+  &__no {
+    flex: none;
+    font-size: 12px;
+    color: var(--app-text-secondary-strong);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__item.is-active &__no {
+    color: var(--app-primary);
+  }
+
+  /* 章标题：降为**次级**信息（O-04）。
+     设计意图：右栏大纲是「结构编辑」而不是「导航」——导航交给左树。所以
+     作者在右栏真正要读的是「这章写了什么」（梗概），章名只用来定位。
+     12px 是字号下限，层级靠字号 + 色阶表达，不再往下缩。 */
+  &__title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--app-text-secondary);
+  }
+
+  &__words {
+    flex: none;
+    font-size: 12px;
+    color: var(--app-text-secondary-strong);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 章节行「本章埋了伏笔」标识 —— 它是**按钮**：点开就在本章下方列出这几条，
+     不必切到「伏笔」页再按章节名找一遍（作者反馈的痛点：只报个数等于没记）。
+     配色沿用既有 pill 约定（TodoListItem 的 .todo-item-note 同款：弱底 + 同色
+     描边 + 同色文字 —— 纯琥珀在浅底上对比度只有 ~2:1，加 1px 描边才「成块」）。 */
+  &__ch-fs.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: 18px;
+    --ant-button-padding-inline: 5px;
+    --ant-button-content-font-size: 12px;
+    --ant-button-icon-gap: 2px;
+    --ant-border-radius: var(--app-radius-pill);
+    --ant-line-width: 1px;
+    --ant-button-default-bg: var(--app-warning-weak);
+    --ant-button-default-color: var(--app-warning);
+    --ant-button-default-border-color: var(--app-warning);
+    --ant-button-default-hover-bg: var(--app-warning-weak);
+    --ant-button-default-hover-color: var(--app-warning);
+    --ant-button-default-hover-border-color: var(--app-warning);
+    --ant-button-default-active-bg: var(--app-warning-weak);
+    --ant-button-default-active-color: var(--app-warning);
+    --ant-button-default-active-border-color: var(--app-warning);
+
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    font-variant-numeric: tabular-nums;
+
+    & > svg,
+    & > .anticon {
+      width: 11px;
+      height: 11px;
+      font-size: 12px;
+    }
+
+    /* 已全部回收：降为中性色，但标识本身保留（「这章埋过线头」本身
+       就是大纲要记住的信息，不能因为回收完就消失） */
+    &:not(.is-open) {
+      --ant-button-default-bg: var(--app-surface-hover);
+      --ant-button-default-color: var(--app-text-secondary-strong);
+      --ant-button-default-border-color: var(--app-border-strong);
+      --ant-button-default-hover-bg: var(--app-surface-hover);
+      --ant-button-default-hover-color: var(--app-text-secondary-strong);
+      --ant-button-default-hover-border-color: var(--app-border-strong);
+      --ant-button-default-active-bg: var(--app-surface-hover);
+      --ant-button-default-active-color: var(--app-text-secondary-strong);
+      --ant-button-default-active-border-color: var(--app-border-strong);
+    }
+
+    /* 展开态：实心化，明确「这一格是开着的」。与上面的 :not(.is-open) 同特异性
+       (0,3,0)，靠源码顺序取胜 → 必须写在它后面 */
+    &.is-expanded {
+      --ant-button-default-bg: var(--app-warning);
+      --ant-button-default-color: var(--app-primary-contrast);
+      --ant-button-default-border-color: var(--app-warning);
+      --ant-button-default-hover-bg: var(--app-warning);
+      --ant-button-default-hover-color: var(--app-primary-contrast);
+      --ant-button-default-hover-border-color: var(--app-warning);
+      --ant-button-default-active-bg: var(--app-warning);
+      --ant-button-default-active-color: var(--app-primary-contrast);
+      --ant-button-default-active-border-color: var(--app-warning);
+    }
+  }
+
+  /* 标识尾部的展开箭头：展开时翻向下 */
+  &__ch-fs-chev {
+    width: 9px;
+    height: 9px;
+    font-size: 12px;
+    transition: transform var(--app-t-normal) var(--app-ease-standard);
+  }
+
+  &__ch-fs.is-expanded &__ch-fs-chev {
+    transform: rotate(180deg);
+  }
+
+  /* 章节行展开的伏笔清单：左侧一条竖线把它和「上一行」系起来，
+     密度比伏笔页更紧（这里只是就地确认「是哪几条 / 收没收」） */
+  &__ch-fs-list {
+    margin: 3px 0 5px;
+    padding: 3px 0 3px 10px;
+    border-left: 2px solid var(--app-border);
+    list-style: none;
+    display: grid;
+    /* 同 __vol-list：单列网格必须显式 minmax(0, 1fr) */
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  /* 行内清单里的伏笔条目：内边距收一档，字号跟着小一级 */
+  &__fs-item.is-compact &__fs {
+    padding: 6px 8px;
+    gap: 8px;
+    background: var(--app-surface-alt);
+  }
+
+  &__fs-item.is-compact &__fs-title {
+    font-size: 14px;
+  }
+
+  /* 标识的悬浮预览（走组件库 Tooltip）：不点开也能先看清是哪几条 */
+  &__fs-tip {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-width: 240px;
+
+    b {
+      font-weight: 500;
+    }
+
+    span {
+      font-size: 12px;
+      opacity: 0.92;
+    }
+
+    span.is-resolved {
+      text-decoration: line-through;
+      opacity: 0.68;
+    }
+
+    em {
+      font-style: normal;
+      font-size: 12px;
+      opacity: 0.72;
+    }
+  }
+
+  &__dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  /* 一句话梗概：整行可点进编辑，光标仍用 text 提示「这里能写字」；
+     空态用「＋ 一句话梗概」提示可编辑（.is-empty 是持久态 → 写默认变量） */
+  /* R-AI-11「给我几个走向」：只出现在选中章、在梗概下方，与梗概左对齐。
+     刻意比重一档的文字色 + 箭头 —— 它是「想不出下一步时」的入口，
+     藏在灰色小字里等于没有。 */
+  &__rescue.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: auto;
+    --ant-button-padding-inline: 8px;
+    --ant-button-content-font-size: 12px;
+    --ant-border-radius: 6px;
+    --ant-color-text: var(--app-primary);
+    --ant-color-text-hover: var(--app-primary-strong);
+
+    align-self: flex-start;
+    margin-top: 2px;
+  }
+
+  &__note.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: auto;
+    --ant-button-padding-inline: 8px;
+    /* 梗概升为行内主体（O-04）：14px + 正文色。它是「这章写了什么」的答案，
+       与章标题的主次关系整个交换过来 */
+    --ant-button-content-font-size: 14px;
+    --ant-border-radius: 6px;
+    --ant-button-default-color: var(--app-text);
+    --ant-button-default-hover-bg: var(--app-surface-hover);
+    --ant-button-default-hover-color: var(--app-text-strong);
+    --ant-button-default-active-bg: var(--app-surface-hover);
+    --ant-button-default-active-color: var(--app-text-strong);
+    --ant-button-default-shadow: none;
+
+    /* 梗概最长 60 字，窄面板下放不下一行：限 2 行 + 省略号（antd 的 .ant-btn 带
+       `white-space: nowrap`，不覆盖就会整句顶出面板，见 __vol-list 的说明）；
+       空态「＋ 一句话梗概」只有一行，观感不变 */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    white-space: normal;
+    word-break: break-word;
+    width: 100%;
+    margin: 3px 0 4px;
+    padding-block: 4px;
+    padding-inline-start: 30px;
+    text-align: left;
+    cursor: text;
+    transition: background var(--app-t-fast) var(--app-ease-standard), color var(--app-t-fast) var(--app-ease-standard);
+
+    &.is-empty {
+      --ant-button-default-color: var(--app-text-disabled);
+      --ant-button-default-hover-color: var(--app-text-disabled);
+      --ant-button-default-active-color: var(--app-text-disabled);
+    }
+  }
+
+  &__note-input,
+  // 组件库 Input：.ant-input 与业务类同为 (0,1,0)，加载顺序不定，
+  // 复合选择器稳定压过组件库默认外观（下同）
+  &__note-input.ant-input {
+    width: calc(100% - 26px);
+    margin: 3px 0 4px 26px;
+    padding: 3px 6px;
+    border: 1px solid var(--app-primary);
+    border-radius: 6px;
+    background: var(--app-input-bg);
+    color: var(--app-text);
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+  }
+
+  /* ── 伏笔 ─────────────────────────────────────────────────────── */
+  &__fs-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    /* 同 __vol-list：单列网格必须显式 minmax(0, 1fr) 才不会按 max-content 撑破面板 */
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  &__fs-item {
+    &.is-resolved .nv-outline__fs {
+      opacity: 0.62;
+    }
+
+    /* 已回收：持久高亮态 → 写默认变量（成功色是 --app-success，反白字是 --app-text-inverse） */
+    &.is-resolved .nv-outline__check.ant-btn {
+      --ant-button-default-bg: var(--app-success);
+      --ant-button-default-border-color: var(--app-success);
+      --ant-button-default-color: var(--app-text-inverse);
+      --ant-button-default-hover-bg: var(--app-success);
+      --ant-button-default-hover-border-color: var(--app-success);
+      --ant-button-default-hover-color: var(--app-text-inverse);
+      --ant-button-default-active-bg: var(--app-success);
+      --ant-button-default-active-border-color: var(--app-success);
+      --ant-button-default-active-color: var(--app-text-inverse);
+    }
+
+    &.is-resolved .nv-outline__tag {
+      background: var(--app-success-weak);
+      color: var(--app-success);
+    }
+
+    &.is-resolved .nv-outline__fs-title {
+      text-decoration: line-through;
+      color: var(--app-text-muted);
+    }
+  }
+
+  &__fs {
+    display: flex;
+    gap: 8px;
+    padding: 9px 10px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-item);
+    background: var(--app-surface);
+    transition: opacity var(--app-t-slow) var(--app-ease-standard), border-color var(--app-t-slow) var(--app-ease-standard);
+  }
+
+  /* 回收勾选圈：未回收时不露勾（字色透明），hover 描边转成功色走变量 */
+  &__check.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: 17px;
+    --ant-button-padding-inline: 0px;
+    --ant-border-radius: 50%;
+    --ant-line-width: 1.6px;
+    --ant-button-default-border-color: var(--app-border-strong);
+    --ant-button-default-color: transparent;
+    --ant-button-default-hover-border-color: var(--app-success);
+    --ant-button-default-hover-color: transparent;
+    --ant-button-default-active-border-color: var(--app-success);
+    --ant-button-default-active-color: transparent;
+    --ant-button-default-shadow: none;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 17px;
+    margin-top: 2px;
+    flex: none;
+    transition: background var(--app-t-normal) var(--app-ease-standard), border-color var(--app-t-normal) var(--app-ease-standard), color var(--app-t-normal) var(--app-ease-standard);
+  }
+
+  &__check-mark {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  &__fs-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__fs-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__tag {
+    flex: none;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--app-accent-rose-weak);
+    color: var(--app-accent-rose);
+    font-size: 12px;
+  }
+
+  &__fs-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+  }
+
+  &__fs-tools {
+    flex: none;
+    display: flex;
+    gap: 1px;
+    opacity: 0;
+    transition: opacity var(--app-t-fast) var(--app-ease-standard);
+  }
+
+  &__fs-item:hover &__fs-tools,
+  &__fs-tools:focus-within {
+    opacity: 1;
+  }
+
+  &__fs-note {
+    margin: 4px 0 0;
+    font-size: 12px;
+    line-height: 1.65;
+    color: var(--app-text-secondary-strong);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  &__fs-src {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 6px;
+    padding: 1px 7px;
+    border-radius: var(--app-radius-pill);
+    background: var(--app-surface-alt);
+    color: var(--app-text-secondary-strong);
+    font-size: 12px;
+
+    /* 卷级伏笔：没有可去之处，光标保持默认 —— 不要让作者以为能点开 */
+    &.is-static {
+      cursor: default;
+    }
+  }
+
+  /* 绑定章节的伏笔：来源文案即跳转入口（REQ-048）。
+     走 `type="link"`，但清零点仍写在同一个 `.xxx.ant-btn` 选择器里（§6.1.2）——
+     link 变体读的是 `--ant-button-text-*` 这组变量，与默认变体不同，故一并声明。 */
+  &__fs-src.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: auto;
+    --ant-border-radius: var(--app-radius-pill);
+    --ant-button-text-color: var(--app-text-secondary-strong);
+    --ant-button-text-hover-color: var(--app-primary);
+    --ant-button-text-bg: var(--app-surface-alt);
+    --ant-button-text-hover-bg: var(--app-primary-weak);
+
+    margin-top: 6px;
+    padding: 1px 7px;
+    font-size: 12px;
+
+    &:hover {
+      background: var(--app-primary-weak);
+      color: var(--app-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--app-primary);
+      outline-offset: 2px;
+    }
+  }
+
+  /* ── 伏笔新增 / 编辑表单 ──────────────────────────────────────── */
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 8px;
+    border: 1px solid var(--app-primary);
+    border-radius: var(--app-radius-item);
+    background: var(--app-surface);
+  }
+
+  &__input,
+  &__input.ant-input,
+  &__textarea,
+  &__textarea.ant-input,
+  // 组件库 Select（AGENTS 6.1.2）：覆盖 antd 默认外观，贴合面板密度
+  &__select {
+    width: 100%;
+    margin-bottom: 6px;
+
+    // antd 6 的边框/背景画在根元素 .ant-select 上，经 --ant-select-* 变量联动
+    // hover/focus/disabled——只覆盖变量，禁止再给内层 .ant-select-content 加边框（会双边框）
+    &.ant-select {
+      min-height: 30px;
+      --ant-select-border-radius: 8px;
+      --ant-select-border-color: var(--app-border);
+      --ant-select-background-color: var(--app-input-bg);
+      --ant-select-padding-horizontal: 8px;
+      --ant-select-font-size: 12px;
+      --ant-select-color: var(--app-text);
+
+      .ant-select-placeholder {
+        color: var(--app-text-muted);
+      }
+
+      &:not(.ant-select-disabled):hover,
+      &.ant-select-focused {
+        --ant-select-border-color: var(--app-primary) !important;
+      }
+
+      &.ant-select-disabled {
+        --ant-select-border-color: var(--app-border) !important;
+        --ant-select-background-color: var(--app-surface-alt) !important;
+        --ant-select-color: var(--app-text-disabled) !important;
+      }
+    }
+  }
+
+  &__textarea,
+  &__textarea.ant-input {
+    resize: vertical;
+  }
+
+  // antd v6 borderless 聚焦自带 focus-visible outline，与伏笔表单自身边框
+  // 叠两层；梗概行内编辑同理（容器无聚焦指示，以光标为聚焦信号）
+  &__input:focus,
+  &__input:focus-visible,
+  &__input.ant-input:focus,
+  &__input.ant-input:focus-visible,
+  &__textarea:focus,
+  &__textarea:focus-visible,
+  &__textarea.ant-input:focus,
+  &__textarea.ant-input:focus-visible,
+  &__note-input:focus,
+  &__note-input:focus-visible,
+  &__note-input.ant-input:focus,
+  &__note-input.ant-input:focus-visible {
+    outline: none;
+  }
+
+  &__form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  /* 伏笔表单的提交 / 取消：同为面板密度的小按钮，外观差异只在变量上 */
+  &__save.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: 24px;
+    --ant-button-padding-inline: 12px;
+    --ant-button-content-font-size: 12px;
+    --ant-border-radius: 8px;
+    --ant-button-default-bg: var(--app-primary);
+    --ant-button-default-color: var(--app-primary-contrast);
+    --ant-button-default-border-color: var(--app-primary);
+    --ant-button-default-hover-bg: var(--app-primary-strong);
+    --ant-button-default-hover-color: var(--app-primary-contrast);
+    --ant-button-default-hover-border-color: var(--app-primary-strong);
+    --ant-button-default-active-bg: var(--app-primary-strong);
+    --ant-button-default-active-color: var(--app-primary-contrast);
+    --ant-button-default-active-border-color: var(--app-primary-strong);
+    --ant-button-default-shadow: none;
+
+    justify-content: center;
+    transition: background var(--app-t-fast) var(--app-ease-standard), color var(--app-t-fast) var(--app-ease-standard), border-color var(--app-t-fast) var(--app-ease-standard);
+  }
+
+  &__cancel.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: 24px;
+    --ant-button-padding-inline: 12px;
+    --ant-button-content-font-size: 12px;
+    --ant-border-radius: 8px;
+    --ant-line-width: 1px;
+    --ant-button-default-border-color: var(--app-border);
+    --ant-button-default-color: var(--app-text-secondary);
+    --ant-button-default-hover-color: var(--app-text);
+    --ant-button-default-hover-border-color: var(--app-text-muted);
+    --ant-button-default-active-color: var(--app-text);
+    --ant-button-default-active-border-color: var(--app-text-muted);
+    --ant-button-default-shadow: none;
+
+    justify-content: center;
+    transition: background var(--app-t-fast) var(--app-ease-standard), color var(--app-t-fast) var(--app-ease-standard), border-color var(--app-t-fast) var(--app-ease-standard);
+  }
+}
+
+/* Select 下拉挂在 portal 上，样式必须写在组件根选择器之外才能命中 */
+.nv-outline__dropdown {
+  border-radius: 9px;
+  box-shadow: var(--app-shadow-pop);
+
+  .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+    background: var(--app-primary-weak);
+    color: var(--app-primary);
+  }
+
+  .ant-select-item {
+    font-size: 12px;
+  }
+}

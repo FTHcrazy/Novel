@@ -1,0 +1,38 @@
+.pnpm-store
+.pnpm-store/**
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+dist-electron
+release
+# 备用打包输出目录（electron-builder -c.directories.output=release-xxx），
+# 用于 release/ 被占用时另开目录取证；产物不应进版本库
+release-*
+*.local
+.workbuddy
+.cache-shots
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.cache-mam-dump
+
+
+design/*

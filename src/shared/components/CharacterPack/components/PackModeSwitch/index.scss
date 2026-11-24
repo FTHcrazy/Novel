@@ -1,0 +1,10 @@
+/* 形态切换 Segmented（台账 ↔ 进阶）：覆盖外观只改组件级 CSS 变量（§6.1.2 规则 1） */
+
+.lq-mode.ant-segmented {
+  --ant-segmented-item-selected-bg: var(--app-surface);
+  --ant-segmented-item-selected-color: var(--app-text-strong);
+  --ant-segmented-track-bg: var(--app-surface-alt);
+  --ant-segmented-track-padding: 2px;
+  --ant-segmented-item-color: var(--app-text-secondary);
+  font-size: 12px;
+}

@@ -1,0 +1,263 @@
+// 整卡是 antd Button（§6.1.2）：卡片外观由 CSS 定，先把组件级变量清零再声明
+@use "../../../../../../shared/styles/widget" as widget;
+
+.bs-card.ant-btn {
+  @include widget.ant-button-reset;
+  --ant-control-height: auto;
+  --ant-border-radius: var(--app-radius-panel);
+  --ant-line-width: 1px;
+  --ant-button-default-bg: var(--app-surface);
+  --ant-button-default-border-color: var(--app-border);
+  --ant-button-default-hover-bg: var(--app-surface);
+  --ant-button-default-hover-border-color: var(--app-border);
+  --ant-button-default-active-bg: var(--app-surface);
+  --ant-button-default-active-border-color: var(--app-border);
+
+  /* 下面这些属性 antd 不接管，直接写在自己身上即可 */
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  /* 与新建作品虚线卡同高：网格行高取整行最高者，本卡撑满该行 */
+  height: 100%;
+}
+
+.bs-card {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-panel);
+  overflow: hidden;
+  cursor: pointer;
+  /* 静止态给一档 ambient 环境阴影，避免「描边卡」平铺；hover 抬升换 raised 档 */
+  box-shadow: var(--app-shadow-ambient);
+  transition: transform var(--app-t-normal) var(--app-ease-standard),
+    box-shadow var(--app-t-normal) var(--app-ease-standard);
+
+  &:hover,
+  &:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: var(--app-shadow-raised);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--app-primary);
+    outline-offset: 2px;
+  }
+
+  /* ── 网格视图：竖版封面在上 ── */
+  &--grid {
+    display: flex;
+    flex-direction: column;
+
+    .bs-card__cover {
+      flex: none; /* 封面高度只由 aspect-ratio 决定，被行高拉伸时不吃掉信息区 */
+      width: 100%;
+      aspect-ratio: 5 / 4;
+    }
+
+    .bs-card__info {
+      /* 行被拉高时多出来的空间落在信息区（文字仍贴顶），保证底边与虚线卡齐平 */
+      flex: 1;
+      padding: 10px 12px 12px;
+    }
+  }
+
+  /* ── 列表视图：横排行（标题行 + 合并信息行 + 右缘箭头）──
+     行是满宽的，不适合网格卡那套「上浮 2px」的 hover：改用底色 + 描边表达
+     「这一行可进」，视线不跳。标题行不再 space-between —— 状态标签紧贴标题，
+     右缘只留箭头，避免「标签与标题脱开、又和箭头挤在一条线上」的两截感。
+
+     ⚠️ 必须写成 `&--list.ant-btn`：布局属性（display / align-items / padding）
+     要压过基类 `.bs-card.ant-btn` 的 `padding: 0; align-items: stretch`，
+     只写 `.bs-card--list`（0,1,0）会被 (0,2,0) 的基类吃掉 —— 表现为
+     「列表行内边距全丢、封面贴死边角」。 */
+  &--list.ant-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px 8px 8px;
+    /* 行高唯一出处见 .bs-page__grid--list 的 `--bs-row-height`
+       （封面 50 + 内边距 16 + 描边 2）。这里只**认**这个值，不自算一份 */
+    min-height: var(--bs-row-height, 68px);
+    /* 列表行满宽、不浮起：静止态也清掉基类的 ambient 环境阴影 */
+    box-shadow: none;
+
+    &:hover,
+    &:focus-visible {
+      transform: none;
+      box-shadow: none;
+      background: var(--app-surface-hover);
+      border-color: var(--app-border-strong);
+    }
+
+    .bs-card__cover {
+      flex: none;
+      width: 38px;
+      height: 50px;
+      border-radius: 7px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+
+    .bs-card__cover-char {
+      font-size: 20px;
+    }
+
+    .bs-card__info {
+      flex: 1;
+      min-width: 0;
+      gap: 3px;
+    }
+
+    .bs-card__name-row {
+      justify-content: flex-start;
+      gap: 8px;
+    }
+
+    .bs-card__badge {
+      padding: 0 7px;
+      line-height: 18px;
+    }
+
+    /* 信息行可能比面板长（「连载中 · 5 万字 · 21 章 · 今天 10:45 更新」），
+       整行省略号收口，不让它顶开卡片宽度 */
+    .bs-card__meta {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* 右缘尾随区：箭头默认很淡，hover 时点亮并右移一点，
+       给「这一行可进」的方向感 */
+    .bs-card__trail {
+      flex: none;
+      display: flex;
+      align-items: center;
+      padding-left: 4px;
+    }
+
+    .bs-card__go {
+      font-size: 12px;
+      color: var(--app-text-disabled);
+      transition: color var(--app-t-fast) var(--app-ease-standard),
+        transform var(--app-t-fast) var(--app-ease-standard);
+    }
+
+    &:hover .bs-card__go {
+      color: var(--app-primary);
+      transform: translateX(2px);
+    }
+  }
+
+  &__cover {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+
+    /* 装饰光斑：伪元素径向渐变，不参与布局 */
+    &::after {
+      content: "";
+      position: absolute;
+      right: -18%;
+      top: -22%;
+      width: 70%;
+      height: 70%;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.28), transparent 68%);
+      pointer-events: none;
+    }
+
+    /* 真封面压满整个封面框：光斑与首字水印都让位，避免糊在图上 */
+    &.is-image::after {
+      display: none;
+    }
+  }
+
+  &__cover-img {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    user-select: none;
+  }
+
+  &__cover-char {
+    font-size: 30px;
+    font-weight: 800;
+    opacity: 0.92;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    user-select: none;
+  }
+
+  &__info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  &__name-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  &__name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--app-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__badge {
+    flex: none;
+    padding: 1px 8px;
+    border-radius: var(--app-radius-pill);
+    font-size: 12px;
+    font-weight: 500;
+
+    &--ongoing {
+      background: var(--app-primary-weak);
+      color: var(--app-primary);
+    }
+
+    &--finished {
+      background: var(--app-success-weak);
+      color: var(--app-success);
+    }
+  }
+
+  &__meta {
+    margin: 0;
+    font-size: 12px;
+    color: var(--app-text-secondary);
+    white-space: nowrap;
+  }
+
+  /* 题材行：已设置 → 常规次要色；未设置 → 压到 disabled 档，读成「待补」。
+     不加 chip 底色/描边：书卡本身已有描边 + 环境阴影，再叠一块色会发闷。 */
+  &__genre {
+    margin: 0;
+    font-size: 12px;
+    color: var(--app-text-secondary);
+    white-space: nowrap;
+
+    &.is-unset {
+      color: var(--app-text-disabled);
+    }
+  }
+
+  &__updated {
+    margin: 0;
+    font-size: 12px;
+    color: var(--app-text-muted);
+    white-space: nowrap;
+  }
+}

@@ -1,0 +1,356 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CloseOutlined, SearchOutlined, TagsOutlined } from "@ant-design/icons";
+import { Button, Input } from "antd";
+import EntityCard from "../EntityCard";
+import EntityDetail from "../EntityDetail";
+import type { EntitySavePatch } from "../EntityDetail";
+import { useEntityTypeMeta } from "../../hooks/entity-types-context";
+import EntityTypeChip from "../../../../components/EntityTypeChip";
+import { useEdgeFade } from "../SupportPanel/useEdgeFade";
+import { useAppearanceStore } from "../../store/useAppearanceStore";
+import type { EntityFilter } from "../../hooks/useNovelViewState";
+import type {
+  EntityAppearance,
+  EntityRelationView,
+  EntityType,
+  SettingCategory,
+  NovelEntity,
+} from "../../types";
+import { formatBoundRealmName, parseRealmNoteSub } from "../../utils/setting-utils";
+import { resolveChipsScrollDelta } from "./chips-scroll";
+import "./index.scss";
+
+interface EntityPanelProps {
+  entities: NovelEntity[];
+  filter: EntityFilter;
+  onFilterChange: (filter: EntityFilter) => void;
+  detailEntityId: string | null;
+  onOpenEntity: (entityId: string) => void;
+  onCloseEntity: () => void;
+  getEntityRelations: (
+    entityId: string,
+    type: EntityType,
+  ) => EntityRelationView[];
+  getAppearances: (entityId: string) => EntityAppearance[];
+  /** 小说设定：卡片上的「当前境界」从 realm 分类的阶梯里取 */
+  settings: SettingCategory[];
+  highlighted: boolean;
+  onToggleHighlight: () => void;
+  onExportCard: () => void;
+  onSaveEntity: (entityId: string, patch: EntitySavePatch) => void;
+  /** 删除资料卡（移入回收站，可恢复） */
+  onDeleteEntity: (entityId: string) => void;
+  onSelectChapter: (chapterId: string) => void;
+  onAddRelation: (
+    entityId: string,
+    entityType: EntityType,
+    targetId: string,
+    relation: string,
+  ) => void;
+  onRemoveRelation: (linkId: string, targetName: string) => void;
+  /** 设定 / 取消当前境界 */
+  onSetEntityLevel: (entityId: string, levelId: string | null, sub?: number) => void;
+  /** 打开设定中心 */
+  onOpenSettings: () => void;
+  /** 打开自定义要素类型管理（REQ-049：空态 CTA 直达） */
+  onOpenTypeManager: () => void;
+  /** 行囊主角绑定的要素 id（空串 = 尚未指定） */
+  protagonistEntityId: string;
+  /** 设为主角 / 换一个 / 再点一次取消（与行囊面板的「绑定实体」同源） */
+  onSetProtagonist: (entityId: string) => void;
+  /** 把要素名插入正文光标处 */
+  onInsertName: (name: string) => void;
+}
+
+/** 名称 / 别名 / 一句话三处命中即算匹配 */
+function matchKeyword(entity: NovelEntity, keyword: string): boolean {
+  if (!keyword) return true;
+  const haystack =
+    `${entity.name} ${entity.aliases.join(" ")} ${entity.summary}`.toLowerCase();
+  return haystack.includes(keyword);
+}
+
+/**
+ * 要素库面板（R7 / R23）
+ *
+ * 顶部搜索 + 带计数的类型 chips → 要素卡列表 → 详情。
+ * 搜索与筛选都是本面板的短生命周期状态，不回流到页面；
+ * 「全部」视图按类型分组，避免几十张卡混成一片。
+ */
+export default function EntityPanel({
+  entities,
+  filter,
+  onFilterChange,
+  detailEntityId,
+  onOpenEntity,
+  onCloseEntity,
+  getEntityRelations,
+  getAppearances,
+  settings,
+  highlighted,
+  onToggleHighlight,
+  onExportCard,
+  onSaveEntity,
+  onDeleteEntity,
+  onSelectChapter,
+  onAddRelation,
+  onRemoveRelation,
+  onSetEntityLevel,
+  onOpenSettings,
+  onOpenTypeManager,
+  protagonistEntityId,
+  onSetProtagonist,
+  onInsertName,
+}: EntityPanelProps) {
+  const { metaOf, filterOrder } = useEntityTypeMeta();
+  const [keyword, setKeyword] = useState("");
+  // 出场章数索引由 store 增量维护：本面板订阅它，角标更新时才重渲染，
+  // 页面根不再为了这个数字被保存动作推一遍
+  const appearanceCounts = useAppearanceStore((state) => state.counts);
+  // 首次导入长篇（数千章）时冷扫已改为分批：统计期间角标显示占位，
+  // 否则用户看到的是一个会跳动的小数字，误以为「出场 3 章」是真实结果
+  const appearancePending = useAppearanceStore((state) => state.pending);
+  // 类型 chips 行横向溢出时两端渐隐提示（滚动条为隐藏设计）
+  const { ref: chipsRef, fadeLeft, fadeRight } = useEdgeFade<HTMLDivElement>();
+
+  // 类型计数：只在要素集合变化时重算，与筛选 / 搜索无关
+  const counts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entity of entities) {
+      map.set(entity.type, (map.get(entity.type) ?? 0) + 1);
+    }
+    return map;
+  }, [entities]);
+
+  // 选中 chip 居中：类型一多，chips 行就变成隐藏滚动条的横向长条，
+  // 选中的那颗可能停在右边缘的渐隐区里（看着像被切了一半）。
+  // 每次筛选变化都把选中的 chip 滚到可视区正中：左右各露半颗邻项，
+  // 「两边还有更多分类」这件事一眼可见，鼠标也在最容易够到的位置。
+  // 首尾两端由下面的 clamp 兜住，滚不动时贴边即可。
+  const chipsMountedRef = useRef(false);
+  useEffect(() => {
+    const row = chipsRef.current;
+    const on = row?.querySelector<HTMLElement>(".nv-chip.is-on");
+    if (!row || !on) return;
+    // 用视口矩形差值求目标 scrollLeft：.nv-chips 不是定位元素，
+    // offsetLeft 会相对更外层的定位祖先解析，这里不能用它
+    const rowRect = row.getBoundingClientRect();
+    const onRect = on.getBoundingClientRect();
+    // 取整：小数 scrollLeft 在部分 Windows 缩放下会停在 0.5px 上抖动
+    const delta = Math.round(resolveChipsScrollDelta(rowRect, onRect));
+    if (Math.abs(delta) < 1) return;
+    const target = Math.max(
+      0,
+      Math.min(row.scrollWidth - row.clientWidth, row.scrollLeft + delta),
+    );
+    if (Math.abs(row.scrollLeft - target) <= 1) return;
+    // jsdom 未实现 Element.scrollTo，守卫避免单测环境报错
+    if (typeof row.scrollTo !== "function") return;
+    row.scrollTo({
+      left: target,
+      behavior: chipsMountedRef.current ? "smooth" : "auto",
+    });
+    chipsMountedRef.current = true;
+  }, [filter, counts, chipsRef]);
+
+  const trimmed = keyword.trim().toLowerCase();
+
+  const visible = useMemo(
+    () =>
+      entities.filter(
+        (entity) =>
+          (filter === "all" || entity.type === filter) &&
+          matchKeyword(entity, trimmed),
+      ),
+    [entities, filter, trimmed],
+  );
+
+  // 卡片的关联数与当前境界：只为**当前可见**的要素算，而不是全量。
+  // 原实现对 entities（全量）逐个 getEntityRelations + 遍历全部等级体系，
+  // 长篇里要素数以百计、关联更多，切一次筛选/输一个关键词就整表重算。
+  // 可见集通常远小于全量，且贴边卡片才有必要知道这些数字。
+  const statsOf = useMemo(() => {
+    const map = new Map<string, { relations: number; levelName: string }>();
+    for (const entity of visible) {
+      const relations = getEntityRelations(entity.id, entity.type);
+      const binding = relations.find((item) => item.targetType === "level");
+      let levelName = "";
+      if (binding) {
+        for (const category of settings) {
+          // 父阶优先：绑在根阶 + note.sub 时显示「父阶 · 层名」，
+          // 绑在派生段上（旧数据）显示「父阶 · 段名」
+          const name = formatBoundRealmName(
+            category.levels,
+            binding.targetId,
+            parseRealmNoteSub(binding.note),
+          );
+          if (name) {
+            levelName = name;
+            break;
+          }
+        }
+      }
+      map.set(entity.id, { relations: relations.length, levelName });
+    }
+    return map;
+  }, [visible, getEntityRelations, settings]);
+
+  const detail = entities.find((entity) => entity.id === detailEntityId) ?? null;
+
+  if (detail) {
+    return (
+      <EntityDetail
+        entity={detail}
+        entities={entities}
+        relations={getEntityRelations(detail.id, detail.type)}
+        appearances={getAppearances(detail.id)}
+        settings={settings}
+        highlighted={highlighted}
+        onToggleHighlight={onToggleHighlight}
+        onExportCard={onExportCard}
+        onSaveEntity={onSaveEntity}
+        onDeleteEntity={onDeleteEntity}
+        onSelectChapter={onSelectChapter}
+        onAddRelation={onAddRelation}
+        onRemoveRelation={onRemoveRelation}
+        onSetEntityLevel={(levelId, sub) =>
+          onSetEntityLevel(detail.id, levelId, sub)
+        }
+        onOpenSettings={onOpenSettings}
+        isProtagonist={Boolean(protagonistEntityId) && detail.id === protagonistEntityId}
+        onSetProtagonist={() => onSetProtagonist(detail.id)}
+        onBack={onCloseEntity}
+      />
+    );
+  }
+
+  /** 主角置顶：同一类型里，主角永远是第一张卡，省掉每次翻找 */
+  const protagonistFirst = (list: NovelEntity[]): NovelEntity[] => {
+    if (!protagonistEntityId || list.length < 2) return list;
+    const index = list.findIndex((entity) => entity.id === protagonistEntityId);
+    if (index <= 0) return list;
+    return [list[index], ...list.slice(0, index), ...list.slice(index + 1)];
+  };
+
+  const renderCard = (entity: NovelEntity) => {
+    const stats = statsOf.get(entity.id);
+    const isProtagonist =
+      Boolean(protagonistEntityId) && entity.id === protagonistEntityId;
+    return (
+      <li key={entity.id}>
+        <EntityCard
+          entity={entity}
+          relationCount={stats?.relations ?? 0}
+          appearanceCount={appearanceCounts.get(entity.id) ?? 0}
+          appearancePending={appearancePending}
+          levelName={stats?.levelName ?? ""}
+          isProtagonist={isProtagonist}
+          onOpen={onOpenEntity}
+          onInsertName={onInsertName}
+          onSetProtagonist={() => onSetProtagonist(entity.id)}
+        />
+      </li>
+    );
+  };
+
+  return (
+    <div className="nv-entity">
+      <div className="nv-field nv-entity__search">
+        <SearchOutlined />
+        <Input
+          variant="borderless"
+          value={keyword}
+          placeholder="搜名称 / 别名 / 简介"
+          aria-label="搜索要素"
+          onChange={(event) => setKeyword(event.target.value)}
+        />
+        {keyword && (
+          <Button
+            className="nv-field__clear"
+            aria-label="清空搜索"
+            onClick={() => setKeyword("")}
+          >
+            <CloseOutlined />
+          </Button>
+        )}
+      </div>
+
+      <div
+        ref={chipsRef}
+        className={`nv-chips nv-entity__chips${fadeLeft ? " is-fade-left" : ""}${
+          fadeRight ? " is-fade-right" : ""
+        }`}
+      >
+        <Button
+          className={`nv-chip${filter === "all" ? " is-on" : ""}`}
+          style={filter === "all" ? { color: "var(--app-primary)" } : undefined}
+          onClick={() => onFilterChange("all")}
+        >
+          全部<em>{entities.length}</em>
+        </Button>
+        {filterOrder.map((type) => {
+          const count = counts.get(type) ?? 0;
+          if (count === 0) return null;
+          const meta = metaOf(type);
+          const on = filter === type;
+          return (
+            <EntityTypeChip
+              key={type}
+              meta={meta}
+              pressed={on}
+              onClick={() => onFilterChange(type)}
+              className="nv-chip"
+            >
+              <span>
+                {meta.label}
+                <em>{count}</em>
+              </span>
+            </EntityTypeChip>
+          );
+        })}
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="nv-empty">
+          <b>没有匹配的要素</b>
+          <span>换个关键词，或切回「全部」</span>
+          {/* REQ-049：空态正好是「想建个新类型但找不到入口」的高发场景，
+              在这里给一条直达类型管理的引导，而不是让作者去面板头找图标 */}
+          <span className="nv-empty__hint">
+            还没有自定义类型？点「类型管理」新建
+          </span>
+          <Button className="nv-empty__cta" onClick={onOpenTypeManager}>
+            <TagsOutlined />
+            <span>类型管理</span>
+          </Button>
+        </div>
+      ) : filter === "all" ? (
+        <>
+          {filterOrder.map((type) => {
+            const group = protagonistFirst(
+              visible.filter((entity) => entity.type === type),
+            );
+            if (group.length === 0) return null;
+            return (
+              <div key={type}>
+                <div className="nv-sechead">
+                  {metaOf(type).label}
+                  <em>{group.length}</em>
+                </div>
+                <ul className="nv-entity__list">{group.map(renderCard)}</ul>
+              </div>
+            );
+          })}
+        </>
+      ) : (
+        <>
+          <div className="nv-sechead">
+            {metaOf(filter).label}
+            <em>{visible.length}</em>
+          </div>
+          <ul className="nv-entity__list">{protagonistFirst(visible).map(renderCard)}</ul>
+        </>
+      )}
+    </div>
+  );
+}

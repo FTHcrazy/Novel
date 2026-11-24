@@ -1,0 +1,205 @@
+@use "../../styles/pack-widget" as widget;
+
+/* 盘点台账宿主（小条幅形态）：全部 --app-* 令牌 */
+
+.lq {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.lq__spacer {
+  flex: 1;
+}
+
+/* 头部操作区 */
+.lq__headbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 6px;
+}
+
+.lq__headbar .lq__tplbtn.ant-btn,
+.lq__headbar .lq__morebtn.ant-btn {
+  @include widget.cpk-widget;
+
+  font-size: 12px;
+  height: 26px;
+  padding: 0 10px;
+  color: var(--app-text-secondary);
+}
+
+/* 卡片头（主角绑定，沿用现有绑定与改名事件） */
+.lq__cardhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 10px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-item);
+  background: var(--app-surface-alt);
+}
+
+.lq__avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--app-primary);
+  color: var(--app-primary-contrast);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lq__who {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text-strong);
+}
+
+.lq__bind {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-primary-weak);
+  color: var(--app-primary);
+}
+
+.lq__cardhead .lq__savebtn.ant-btn {
+  font-size: 12px;
+  height: 26px;
+  padding: 0 10px;
+}
+
+/* 空态 */
+.lq__empty {
+  padding: 36px 16px 24px;
+  text-align: center;
+}
+
+.lq__empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text-strong);
+}
+
+.lq__empty-desc {
+  font-size: 12px;
+  color: var(--app-text-secondary);
+  margin: 6px 0 14px;
+}
+
+.lq__empty-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* 首次引导（≤3 步） */
+.lq__guide {
+  margin: 0 10px 8px;
+  padding: 10px;
+  border-radius: var(--app-radius-item);
+  background: var(--app-primary);
+  color: var(--app-primary-contrast);
+}
+
+.lq__guide-step {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-bottom: 2px;
+}
+
+.lq__guide-text {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.lq__guide-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* 资源行列表 */
+.lq__rows {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 4px;
+}
+
+.lq__addrow {
+  padding: 4px 10px 0;
+}
+
+.lq__addbtn.ant-btn {
+  height: 34px;
+  font-size: 12px;
+}
+
+/* 备注折叠区 */
+.lq__notescollapse {
+  margin-top: 10px;
+}
+
+.lq__notestoggle.ant-btn {
+  justify-content: flex-start;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--app-text-secondary);
+  height: 32px;
+}
+
+/* 章节上下文脚注（零新增 IPC） */
+.lq__chapterfoot {
+  margin-top: auto;
+  padding: 8px 10px 10px;
+  font-size: 12px;
+  color: var(--app-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.lq__chapterdot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--app-accent-green);
+}
+
+/* 添加资源 Popover 内容 */
+.lq-add {
+  width: 236px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lq-add__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text-strong);
+  margin-bottom: 2px;
+}
+
+.lq-add__row {
+  display: flex;
+  gap: 6px;
+}
+
+.lq-add__kind {
+  flex: 1;
+  min-width: 0;
+}
+
+.lq-add__cap {
+  flex: none;
+  width: 104px;
+}

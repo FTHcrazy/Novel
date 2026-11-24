@@ -1,0 +1,92 @@
+@use "../../shared/styles/window-shell";
+@use "../../shared/styles/scrollbars";
+// 标题栏入口按钮由 antd `Button` 承载（AGENTS §6.1.2）：清零点 mixin 先清零
+// 组件级变量，再声明自己的外观；hover 也必须写成变量
+@use "../../shared/styles/widget" as widget;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  // 圆角窗口：背景交给 .window-shell，dom 层保持透明
+  background: transparent;
+  color: var(--app-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+// 内容区：标题栏由通用 WindowHeader 提供，这里只负责主体内容铺满
+.window-shell__body {
+  flex: 1;
+  min-height: 0;
+}
+
+// ── 书架 ↔ 编辑器双视图 ─────────────────────────────────────────
+// 常驻挂载 + display 切换：切换不走卸载，编辑器未落库键入得以保留
+.novel-views {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.novel-view {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+
+  // 页面根（.bs-page / .nv-page）只有 height:100% 没有宽度声明——
+  // 直接挂在块级容器下时块级宽度自动铺满，成为 flex item 后主轴会
+  // shrink-to-fit（编辑器内容自然宽 < 视口 → 右侧留白），这里显式拉满
+  > * {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  &.is-hidden {
+    display: none;
+  }
+}
+
+// 窗口标题栏徽标（书架视图）：对齐设计稿头部的「书架」chip
+.novel-badge {
+  padding: 2px 10px;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-primary-weak);
+  color: var(--app-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+// novel 版主窗标题栏的设置入口（挂在 WindowHeader 的 actions 插槽内）
+.novel-window-header-btn.ant-btn {
+  @include widget.ant-button-reset;
+  --ant-control-height: 24px;
+  --ant-button-padding-inline: 0px;
+  --ant-button-content-font-size: 14px;
+  --ant-border-radius: var(--app-radius-item);
+  --ant-button-default-bg: transparent;
+  --ant-button-default-color: var(--app-text-secondary);
+  --ant-button-default-hover-bg: var(--app-surface-hover);
+  --ant-button-default-hover-color: var(--app-text);
+  --ant-button-default-active-bg: var(--app-surface-hover);
+  --ant-button-default-active-color: var(--app-text);
+  --ant-button-default-shadow: none;
+
+  /* antd 不接管的属性 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  cursor: pointer;
+  transition: background-color var(--app-t-fast) var(--app-ease-standard),
+    color var(--app-t-fast) var(--app-ease-standard);
+}

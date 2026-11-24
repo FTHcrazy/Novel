@@ -1,0 +1,242 @@
+@use "../../styles/pack-widget" as widget;
+
+/* 资源行（余额型 40px / 进度型 52px）：自带造型控件以 .ant-btn 承载，
+   清零点与外观变量写在同一个选择器里（§6.1.2 规则 3） */
+
+.lq-row {
+  position: relative;
+  margin: 0 4px;
+  border-radius: var(--app-radius-item);
+  transition: background var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    background: var(--app-surface-hover);
+  }
+}
+
+/* 拖拽中（@dnd-kit）：位移由 sortable 的 inline transform 驱动，这里只给浮起感 */
+.lq-row--dragging {
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-pop);
+  z-index: 2;
+}
+
+/* 记账成功高亮闪烁（spec 11.5）：120ms 一闪，动画结束自动回落 */
+.lq-row--flash {
+  animation: lq-flash var(--app-t-fast) var(--app-ease-standard) 2;
+}
+
+@keyframes lq-flash {
+  from {
+    background: var(--app-primary-weak);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+.lq-row__main {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 4px;
+}
+
+/* 静止态半显、悬停 / 展开全显（spec 11.4） */
+.lq-row .lq-row__grip.ant-btn,
+.lq-row .lq-row__more.ant-btn {
+  @include widget.cpk-widget;
+
+  opacity: 0.35;
+  transition: opacity var(--app-t-fast) var(--app-ease-standard);
+}
+
+.lq-row:hover .lq-row__grip.ant-btn,
+.lq-row:hover .lq-row__more.ant-btn,
+.lq-row--expanded .lq-row__grip.ant-btn,
+.lq-row--expanded .lq-row__more.ant-btn,
+.lq-row--dragging .lq-row__grip.ant-btn {
+  opacity: 1;
+}
+
+.lq-row .lq-row__grip.ant-btn {
+  flex: none;
+  width: 22px;
+  height: 28px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  letter-spacing: -1px;
+  cursor: grab;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* dnd-kit PointerSensor 触屏拖拽必需：阻止浏览器接管触摸滚动 */
+  touch-action: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.lq-row .lq-row__name.ant-btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 4px;
+  font-size: 14px;
+  color: var(--app-text);
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+
+  &:hover {
+    color: var(--app-primary);
+    background: transparent;
+  }
+}
+
+.lq-row__name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lq-row__unit {
+  font-size: 12px;
+  color: var(--app-text-muted);
+  font-weight: 400;
+}
+
+.lq-row__badge {
+  flex: none;
+  font-size: 12px;
+  padding: 0 5px;
+  border-radius: var(--app-radius-chip);
+  background: var(--app-warning-weak);
+  color: var(--app-warning);
+}
+
+.lq-row__rename {
+  flex: 1;
+  min-width: 0;
+}
+
+.lq-row__spacer {
+  flex: 1;
+}
+
+.lq-row .lq-row__count.ant-btn {
+  flex: none;
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text);
+  padding: 2px 6px;
+  height: auto;
+  border-radius: var(--app-radius-chip);
+
+  &:hover {
+    background: var(--app-surface-active);
+    color: var(--app-text-strong);
+  }
+}
+
+/* 负余额（剧情透支允许，仅标红提示） */
+.lq-row .lq-row__count--neg.ant-btn {
+  color: var(--app-error);
+}
+
+/* 进度型超上限（允许，标黄提示） */
+.lq-row .lq-row__count--over.ant-btn {
+  color: var(--app-warning);
+}
+
+.lq-row .lq-row__op.ant-btn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--app-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    border-color: var(--app-primary);
+    color: var(--app-primary);
+    background: var(--app-primary-weak);
+  }
+}
+
+.lq-row__anchor {
+  width: 0;
+  height: 0;
+}
+
+.lq-row .lq-row__more.ant-btn {
+  flex: none;
+  width: 22px;
+  height: 26px;
+  padding: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: var(--app-text-strong);
+    background: var(--app-surface-active);
+  }
+}
+
+/* 进度条：进度型行的 4px 细条（超上限转警示色） */
+.lq-row__progtrack {
+  height: 4px;
+  margin: 0 8px 6px 34px;
+  border-radius: 2px;
+  background: var(--app-border);
+  overflow: hidden;
+}
+
+.lq-row__progfill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--app-primary);
+}
+
+.lq-row__progfill--over {
+  background: var(--app-warning);
+}
+
+/* 设上限 Popover 内容 */
+.lq-cap {
+  width: 220px;
+}
+
+.lq-cap__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text-strong);
+  margin-bottom: 8px;
+}
+
+.lq-cap__row {
+  display: flex;
+}
+
+.lq-cap__input {
+  flex: 1;
+}
+
+.lq-cap__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}

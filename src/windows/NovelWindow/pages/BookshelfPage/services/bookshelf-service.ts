@@ -1,0 +1,123 @@
+/**
+ * 书架数据服务（R32）
+ *
+ * 书架与编辑器（NovelPage）是同窗口的两个页面，按 AGENTS.md 页面隔离规范
+ * 互不导入——这里对 preload 暴露的 novel 命名空间做薄封装，作为书架自己的
+ * Service 层（不含业务逻辑、不导入 React）。
+ *
+ * 注意：SHELF_STORAGE_KEYS 与编辑器 novel-config.ts 的 STORAGE_KEYS 指向
+ * 同一份 userDb config 数据（设置 / 位置记忆由编辑器写入、书架只读），
+ * 键值若变更须两处同步。
+ */
+
+import type {
+  NovelBundleDTO,
+  NovelChapterDTO,
+  NovelNoteDTO,
+  NovelVolumeDTO,
+  NovelWorkDTO,
+} from "@/shared/types/electron";
+
+export const SHELF_STORAGE_KEYS = {
+  /** 排版与写作设置（R5）：书架只读派生序号风格与今日目标 */
+  settings: "novel_editor_settings",
+  /** 上次续写位置（R6）：书架只读定位「继续写作」 */
+  position: "novel_editor_position",
+} as const;
+
+/** 生成带随机后缀的行 ID（与编辑器 createNovelId 同构，避免跨页导入） */
+export function createShelfId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * 拉取全量数据包（novel-editor-load）
+ *
+ * 显式传 `includeContent: false`：书架只算章节数 / 字数 / 状态，从不读正文。
+ * 让它随包一起过 IPC 的话，一本 2000 章的书就是约 12MB 字符串白跑一趟。
+ */
+export async function fetchShelfBundle(): Promise<NovelBundleDTO> {
+  return window.electronAPI!.novel.editorLoad(false);
+}
+
+/** 今日写作聚合（含连续码字天数） */
+export interface ShelfUsage {
+  todayWords: number;
+  saveCount: number;
+  streakDays: number;
+}
+
+export async function fetchShelfUsage(): Promise<ShelfUsage> {
+  return window.electronAPI!.novel.usageToday();
+}
+
+/** 读取编辑器设置原文 JSON（解析容错在 hooks 层） */
+export async function fetchShelfSettingsRaw(): Promise<string | null> {
+  return window.electronAPI!.novel.configGet(SHELF_STORAGE_KEYS.settings);
+}
+
+/** 读取续写位置原文 JSON */
+export async function fetchShelfPositionRaw(): Promise<string | null> {
+  return window.electronAPI!.novel.configGet(SHELF_STORAGE_KEYS.position);
+}
+
+/** 新建作品落库（id 由书架生成） */
+export async function addShelfWork(work: NovelWorkDTO): Promise<boolean> {
+  return window.electronAPI!.novel.addWork(work);
+}
+
+/** 新增 / 更新灵感速记（upsert） */
+export async function saveShelfNote(note: NovelNoteDTO): Promise<boolean> {
+  return window.electronAPI!.novel.saveNote(note);
+}
+
+/** 删除灵感速记 */
+export async function removeShelfNote(noteId: string): Promise<boolean> {
+  return window.electronAPI!.novel.removeNote(noteId);
+}
+
+/** 灵感归属迁移：归档到作品；workId 传 '' 退回未归属池 */
+export async function moveShelfNote(noteId: string, workId: string): Promise<boolean> {
+  return window.electronAPI!.novel.moveNote(noteId, workId);
+}
+
+// ── 书卡右键「作品操作」用的通道（2.56.0） ────────────────────────
+//
+// 与上面的读接口同一层：组件不直接碰 `window.electronAPI`，写操作由
+// `useBookshelfData` 乐观更新，动作编排由 `useShelfWorkActions` 负责。
+
+/** 重命名作品（空名由页面校验，这里只落库） */
+export async function renameShelfWork(id: string, name: string): Promise<boolean> {
+  return window.electronAPI!.novel.renameWork(id, name);
+}
+
+/** 修改题材：传空串即清空 */
+export async function setShelfWorkGenre(id: string, genre: string): Promise<boolean> {
+  return window.electronAPI!.novel.setWorkGenre(id, genre);
+}
+
+/** 导入封面：主进程选图 + 压缩 + 落库；取消返回 null */
+export async function pickShelfWorkCover(id: string): Promise<string | null> {
+  return window.electronAPI!.novel.pickWorkCover(id);
+}
+
+/** 删除作品：软删除进回收站（与编辑器「作品管理」同一口径，30 天内可恢复） */
+export async function trashShelfWork(id: string): Promise<boolean> {
+  return window.electronAPI!.novel.trashWork(id);
+}
+
+/** 单部作品的卷章正文：只取导出需要的两张表 */
+export async function fetchShelfWorkContent(workId: string): Promise<{
+  volumes: NovelVolumeDTO[];
+  chapters: NovelChapterDTO[];
+}> {
+  return window.electronAPI!.novel.workContent(workId);
+}
+
+/** TXT 落盘：主进程弹保存框 + 写盘；取消返回 null */
+export async function exportShelfTextFile(
+  defaultName: string,
+  content: string,
+): Promise<{ path: string } | null> {
+  return window.electronAPI!.novel.exportFile(defaultName, content);
+}

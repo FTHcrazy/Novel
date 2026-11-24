@@ -1,0 +1,39 @@
+/* 资源模板 Popover（antd portal 浮层：no-drag 由 PORTAL_OVERLAYS 的 .ant-popover 统一登记） */
+
+.lq-tpl {
+  width: 272px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lq-tpl__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--app-radius-item);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    background: var(--app-surface-hover);
+  }
+}
+
+.lq-tpl__name {
+  flex: none;
+  width: 64px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--app-text-strong);
+}
+
+.lq-tpl__desc {
+  font-size: 12px;
+  color: var(--app-text-secondary);
+  line-height: 1.5;
+}

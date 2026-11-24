@@ -1,0 +1,48 @@
+.nv-toast {
+  position: absolute;
+  bottom: 46px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 48;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-text);
+  color: var(--app-bg);
+  font-size: 12px;
+  box-shadow: var(--app-shadow-pop);
+  pointer-events: none;
+  animation: nv-toast-in var(--app-t-slow) var(--app-ease-standard);
+
+  &--success svg {
+    color: var(--app-success);
+  }
+
+  &--warning svg {
+    color: var(--app-warning);
+  }
+
+  &--info svg {
+    color: var(--app-info);
+  }
+
+  // 编辑器当前不弹 error（共享 hook 的 tone 并集里有），配色随错误色
+  &--error svg {
+    color: var(--app-error);
+  }
+}
+
+@keyframes nv-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nv-toast {
+    animation-duration: 0ms;
+  }
+}

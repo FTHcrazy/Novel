@@ -1,0 +1,121 @@
+@use "../../styles/pack-widget" as widget;
+
+/* 资源流水列表（展开态）：本组件自有元素走 --app-* 令牌；
+   撤销 / 盘点按钮由 antd Button 承载，清零点与外观同选择器 */
+
+.lq-logs {
+  margin: 0 6px 6px 28px;
+  padding: 8px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-item);
+  background: var(--app-surface-alt);
+}
+
+.lq-logs__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.lq-logs .lq-logs__audit.ant-btn {
+  @include widget.cpk-widget;
+
+  border: 1px solid var(--app-primary);
+  color: var(--app-primary);
+  font-size: 12px;
+  height: 24px;
+  padding: 0 9px;
+
+  &:not(:disabled):hover {
+    background: var(--app-primary-weak);
+    border-color: var(--app-primary);
+    color: var(--app-primary);
+  }
+
+  &:disabled {
+    color: var(--app-text-disabled);
+    border-color: var(--app-border);
+    background: var(--app-surface);
+  }
+}
+
+.lq-logs__hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+
+.lq-logs__empty {
+  font-size: 12px;
+  color: var(--app-text-muted);
+  margin: 4px 0;
+}
+
+.lq-logs__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lq-logs__line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  padding: 3px 0;
+  color: var(--app-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.lq-logs__line--void .lq-logs__delta,
+.lq-logs__line--void .lq-logs__balance {
+  color: var(--app-text-disabled);
+  text-decoration: line-through;
+}
+
+.lq-logs__delta {
+  flex: none;
+  min-width: 52px;
+  text-align: right;
+  font-weight: 600;
+}
+
+.lq-logs__delta--plus {
+  color: var(--app-accent-green);
+}
+
+.lq-logs__delta--minus {
+  color: var(--app-error);
+}
+
+.lq-logs__meta {
+  flex: none;
+  color: var(--app-text-muted);
+}
+
+/* 章节列（第 N 章 · 标题）：窄条幅里让标题截断，悬停 tooltip 看全名 */
+.lq-logs__chapter {
+  min-width: 0;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lq-logs__balance {
+  color: var(--app-text-secondary);
+}
+
+.lq-logs__note {
+  color: var(--app-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lq-logs__voidmark {
+  flex: none;
+  font-size: 12px;
+  color: var(--app-text-muted);
+}

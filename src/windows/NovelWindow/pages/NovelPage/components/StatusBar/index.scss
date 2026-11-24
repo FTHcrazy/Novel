@@ -1,0 +1,232 @@
+@use "../../../../../../shared/styles/widget" as widget;
+
+/* 标注开关 .nv-status__anno 由 antd `Button` 承载：先清零再只声明组件级变量。
+   开态（.is-on）是永久高亮，写成默认变量，避免被 antd 的 :hover / :active
+   规则压回去（AGENTS §6.1.2）；聚焦环用组件库自带的。 */
+
+.nv-status {
+  height: 32px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px;
+  border-top: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+
+  &__item b {
+    color: var(--app-text);
+    font-weight: 600;
+  }
+
+  &__positive {
+    color: var(--app-success);
+  }
+
+  // 全局标注层开关（需求稿 §2 风险对策）：常驻状态条，码字途中一键关闭高亮/悬浮卡
+  &__anno.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-border-radius: 4px;
+    --ant-line-width: 1px;
+    --ant-button-content-font-size: 12px;
+    --ant-button-icon-gap: 5px;
+    --ant-button-default-bg: transparent;
+    --ant-button-default-color: var(--app-text-muted);
+    --ant-button-default-border-color: var(--app-border);
+    --ant-button-default-hover-color: var(--app-text-secondary);
+    --ant-button-default-hover-border-color: var(--app-text-muted);
+    --ant-button-default-active-color: var(--app-text-secondary);
+    --ant-button-default-active-border-color: var(--app-text-muted);
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+
+    /* 开态：主色描边 + 主色文字（永久高亮 → 写默认变量）。
+       底色沿用原 `var(--app-primary-bg, transparent)` 的求值结果 transparent ——
+       主题层没有 --app-primary-bg，若想加淡底改成 --app-primary-weak 即可 */
+    &.is-on {
+      --ant-button-default-bg: transparent;
+      --ant-button-default-color: var(--app-primary);
+      --ant-button-default-border-color: var(--app-primary);
+      --ant-button-default-hover-bg: transparent;
+      --ant-button-default-hover-color: var(--app-primary);
+      --ant-button-default-hover-border-color: var(--app-primary);
+      --ant-button-default-active-bg: transparent;
+      --ant-button-default-active-color: var(--app-primary);
+      --ant-button-default-active-border-color: var(--app-primary);
+    }
+  }
+
+  &__anno-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--app-text-muted);
+    transition: background var(--app-t-fast) var(--app-ease-standard);
+
+    .nv-status__anno.is-on & {
+      background: var(--app-primary);
+    }
+  }
+
+  /* D-08：敏感词标注显示的独立开关，与「标注」（要素层）和「敏感 N」（结果）
+     三者并列——外观本身交给 antd Switch，这里只做状态条内的对齐与文字层级。 */
+  &__mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--app-text-muted);
+    font-size: 12px;
+  }
+
+  &__mark-label {
+    color: var(--app-text-muted);
+    user-select: none;
+  }
+
+  /* 敏感词角标：常态与标注开关同款弱化，命中 > 0 时转警示色 */
+  &__sm.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-border-radius: 4px;
+    --ant-line-width: 1px;
+    --ant-button-content-font-size: 12px;
+    --ant-button-icon-gap: 5px;
+    --ant-button-default-bg: transparent;
+    --ant-button-default-color: var(--app-text-muted);
+    --ant-button-default-border-color: transparent;
+    --ant-button-default-hover-color: var(--app-text-secondary);
+    --ant-button-default-hover-border-color: var(--app-border);
+    --ant-button-default-active-color: var(--app-text-secondary);
+    --ant-button-default-active-border-color: var(--app-border);
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+
+    &.is-alert {
+      --ant-button-default-color: var(--app-error);
+      --ant-button-default-border-color: var(--app-error-weak);
+      --ant-button-default-hover-bg: var(--app-error-weak);
+      --ant-button-default-hover-color: var(--app-error);
+      --ant-button-default-hover-border-color: var(--app-error);
+      --ant-button-default-active-bg: var(--app-error-weak);
+      --ant-button-default-active-color: var(--app-error);
+      --ant-button-default-active-border-color: var(--app-error);
+    }
+  }
+
+  &__goal {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  &__goal-label {
+    color: var(--app-text-muted);
+  }
+
+  &__bar {
+    width: 96px;
+    height: 4px;
+    border-radius: var(--app-radius-pill);
+    /* 轨道是"槽"不是"按下态"。宿主 .nv-status 铺的是 --app-surface，槽按阶梯
+       低一档取 --app-surface-alt（贴 surface 约 1.027~1.052，一档可感知）；
+       不能借 --app-surface-hover（那是相对所在面的交互态，静态铺开等于把整屏
+       压重一档），也不用 --app-surface-active（cream 下 1.20 比填充色还抢眼）。 */
+    background: var(--app-surface-alt);
+    overflow: hidden;
+  }
+
+  &__fill {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--app-radius-pill);
+    background: var(--app-primary-gradient);
+    /* 只做 transform 动画（scaleX 缩放）：width 参与布局，transition width 会触发
+       reflow，且与 ContinueHero 的 __bar-fill 用 transform 的做法自相矛盾。
+       JS 侧用 `transform: scaleX(progress/100)` 驱动（见 index.tsx） */
+    transform-origin: left center;
+    transition: transform var(--app-t-slow) var(--app-ease-emphasized);
+
+    &.is-done {
+      background: var(--app-success);
+    }
+  }
+
+  &__percent {
+    width: 32px;
+    text-align: right;
+    color: var(--app-text-muted);
+  }
+
+  /* 左侧「本章 / 今日 / 目标」是常驻读数，右侧「标注 / 敏感 / ⋯」是操作区。
+     中间用 spacer 顶开，不再让 goal 用 margin-left:auto —— 两个吸收者会
+     把剩余空间对半分，右侧操作区就被推到中间了 */
+  &__spacer {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* 「⋯」：阅读型信息（码字速度 / 时钟）的入口。与标注 / 敏感同高同触达，
+     但不带文字 —— 它承载的不是当前任务的读数 */
+  &__more.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: 22px;
+    --ant-button-padding-inline: 0px;
+    --ant-button-content-font-size: 12px;
+    --ant-border-radius: 4px;
+    --ant-button-default-bg: transparent;
+    --ant-button-default-color: var(--app-text-muted);
+    --ant-button-default-hover-bg: transparent;
+    --ant-button-default-hover-color: var(--app-text-secondary);
+    --ant-button-default-active-bg: transparent;
+    --ant-button-default-active-color: var(--app-text);
+    --ant-button-default-shadow: none;
+
+    width: 22px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: color var(--app-t-fast) var(--app-ease-standard);
+
+    &:focus-visible {
+      outline: 2px solid var(--app-primary);
+      outline-offset: 2px;
+    }
+  }
+
+  /* 弹层内容：两行 label + 值，值走 tabular-nums（与状态条本体同一口径） */
+  &__pop {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 132px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__pop-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+
+    span {
+      color: var(--app-text-muted);
+    }
+
+    b {
+      color: var(--app-text);
+      font-weight: 600;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nv-status__fill {
+    transition-duration: 0ms;
+  }
+}

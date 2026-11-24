@@ -1,0 +1,70 @@
+@use "../../shared/styles/window-shell";
+@use "../../shared/styles/scrollbars";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  // 圆角窗口：背景交给 .window-shell，dom 层保持透明
+  background: transparent;
+  color: var(--app-text);
+}
+
+.login-window {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  overflow: hidden;
+  // 无系统标题栏：整窗作为拖动区，保证窗口可移动
+  -webkit-app-region: drag;
+  background: linear-gradient(135deg, var(--app-bg) 0%, var(--app-primary-weak) 100%);
+  border-radius: inherit;
+  // 右上角主题切换器的定位基准
+  position: relative;
+}
+
+.login-card {
+  width: min(100%, 460px);
+  border-radius: var(--app-radius-panel);
+  box-shadow: var(--app-shadow-pop);
+  padding: 12px;
+  // 表单内所有可交互元素必须排除拖动区
+  -webkit-app-region: no-drag;
+}
+
+.login-header {
+  text-align: center;
+}
+
+.login-title {
+  margin-bottom: 8px !important;
+}
+
+.welcome-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 4px;
+}
+
+.welcome-icon {
+  font-size: 40px;
+  color: var(--app-primary);
+}
+
+.welcome-email {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--app-primary);
+  word-break: break-all;
+  text-align: center;
+}

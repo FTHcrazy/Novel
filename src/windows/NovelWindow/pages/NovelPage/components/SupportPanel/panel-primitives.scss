@@ -1,0 +1,439 @@
+@use "../../../../../../shared/styles/widget" as widget;
+
+/*
+ * 支撑面板内的通用零件（NL 设计稿 §3）
+ *
+ * 由 SupportPanel 统一引入一次，五个 Tab 的子面板只复用类名、不重复实现：
+ * 这些 input / chips / 空态 / 图标按钮在五个 Tab 里都需要，逐个面板各写
+ * 一份会造成同一套样式五处漂移（违反「组件与样式就近」要求的本意——就近
+ * 指的是「不承担别人不该承担的」，而不是「宁可重复」）。
+ *
+ * 作用域统一收在 .nv-panel 之下，避免影响 panel 之外的任何样式。
+ *
+ * ⚠️ 按钮类（.nv-mini / .nv-chip / .nv-ghost / .nv-field__clear）
+ * 一律由 antd `Button` 承载，外观只通过组件级 CSS 变量配置（AGENTS §6.1.2）：
+ * 先用 `@include widget.ant-button-reset` 把组件库自带外观清零，再在同一个
+ * `.xxx.ant-btn` 选择器里声明变量——antd 的 hover / active / disabled 规则是
+ * (0,4,0) 级，自写 `:hover` 属性规则永远压不过它，而那些规则读的正是这些变量。
+ * 因此 `.is-on` 这种永久高亮态也写成默认变量，不写 `:hover` / `:active`。
+ */
+
+.nv-panel {
+  /* ── 输入行（搜索 / 过滤）─────────────────────────────────────── */
+  .nv-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 9px;
+    border: 1px solid var(--app-border);
+    border-radius: 9px;
+    background: var(--app-input-bg);
+    transition: border-color var(--app-t-fast) var(--app-ease-standard), box-shadow var(--app-t-fast) var(--app-ease-standard);
+
+    &:focus-within {
+      border-color: var(--app-primary);
+      box-shadow: 0 0 0 3px var(--app-primary-weak);
+    }
+
+    & > svg,
+    & > .anticon {
+      width: 13px;
+      height: 13px;
+      flex: none;
+      color: var(--app-text-disabled);
+      font-size: 14px;
+    }
+
+    input {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      background: transparent;
+      color: var(--app-text);
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+
+      &::placeholder {
+        color: var(--app-text-disabled);
+      }
+
+      // antd v6 borderless 聚焦自带 focus-visible outline，与 .nv-field 容器
+      // focus-within 描边叠两层；聚焦指示由容器承担，复合选择器压过组件库
+      &:focus,
+      &:focus-visible {
+        outline: none;
+      }
+    }
+
+    // 组件库 Input（AGENTS 6.1.2）：borderless 变体，外观由 .nv-field 容器承载；
+    // antd 默认内边距会顶开图标与文字间距，归零后交给容器 gap 控制
+    .ant-input {
+      padding: 0;
+      height: auto;
+      background: transparent;
+    }
+  }
+
+  /* 清空按钮：antd Button 承载，仅描一个圆角与图标色 */
+  .nv-field__clear.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-border-radius: 4px;
+    --ant-button-default-color: var(--app-text-disabled);
+    --ant-button-default-hover-color: var(--app-text-secondary);
+    --ant-button-default-active-color: var(--app-text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+  }
+
+  /* ── 子分段（大纲的章节 / 伏笔、检索的作用域、敏感词的三处切换）────
+     已统一收敛到 `NvSegmented`（antd `Segmented` + 右栏共用外观），
+     轨道 / 滑块 / 选中态由该组件自己的 index.scss 用 `--ant-segmented-*`
+     变量声明。这里保留说明，**不要再往回加 `.nv-sub` 手搓按钮组** ——
+     两份实现必然漂移，且键盘语义只有组件库那份是完整的。 */
+
+  /* ── 类型筛选 chips（右侧面板 / 最近搜索）────────────────────────
+     2.71.1：回到「单行横向滚动」，并让选中项自动滚到行中间。
+
+     2.71.0 曾改成按需换行（怕最右那颗停在裁切线上点不到），但换行把分类
+     劈成两行、面板上部整体变高，视觉上比横滚更乱。改为单行 + 选中即居中：
+     切到哪一类，那一类就停在可视区正中，左右各露出半颗邻项作为「还能滚」
+     的提示；两端渐隐遮罩（useEdgeFade）继续标出溢出方向。 */
+  .nv-chips {
+    display: flex;
+    /* 单行不换行：多行会让面板顶部高度随分类数跳动 */
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* 溢出边缘渐隐：滚动条是隐藏设计，两侧还有内容时用遮罩提示。
+       类名由 SupportPanel/useEdgeFade 按滚动位置开关；
+       遮罩画在容器盒上、不随内容滚动，始终覆盖可视边缘 */
+    &.is-fade-left {
+      mask-image: linear-gradient(to right, transparent, #000 18px);
+    }
+
+    &.is-fade-right {
+      mask-image: linear-gradient(to left, transparent, #000 18px);
+    }
+
+    &.is-fade-left.is-fade-right {
+      mask-image: linear-gradient(
+        to right,
+        transparent,
+        #000 18px,
+        #000 calc(100% - 18px),
+        transparent
+      );
+    }
+  }
+
+  .nv-chip.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: 24px;
+    --ant-button-padding-inline: 9px;
+    --ant-button-content-font-size: 12px;
+    --ant-button-font-weight: 400;
+    --ant-button-icon-gap: 4px;
+    --ant-border-radius: var(--app-radius-pill);
+    --ant-line-width: 1px;
+    --ant-button-default-bg: var(--app-surface);
+    --ant-button-default-color: var(--app-text-secondary);
+    --ant-button-default-border-color: transparent;
+    --ant-button-default-hover-bg: var(--app-surface-hover);
+    --ant-button-default-hover-border-color: transparent;
+    --ant-button-default-active-bg: var(--app-surface-hover);
+    --ant-button-default-active-border-color: transparent;
+    display: inline-flex;
+    align-items: center;
+    /* EntityTypeChip 自带 `padding: 1px 6px`（0,2,0），会压过 antd 的
+       padding 变量；这里用同级更高的选择器统一收紧/放开的节奏，
+       免得「全部」与「角色」两种 chip 的左右留白不一致 */
+    padding: 3px 10px;
+    /* 左侧色带必须与其余三边同宽：EntityTypeChip 的 `border-left: 2px`
+       会在 hover 时被 antd 的 `border: 1px solid …` shorthand（特异性 0,4,0）
+       覆盖回来，chip 瞬间窄 1px、文字左移 —— 就是用户说的「hover 时宽度在变」。
+       钉成 1px 后两种状态一致，色带改由内联的 border-left-color 上色。 */
+    border-left-width: 1px;
+    white-space: nowrap;
+    /* ⚠️ 必须不收缩：chips 行是 flex + 横向滚动容器，缺省 flex-shrink: 1 会让
+       宽度不够时「先压扁第一个 chip」而不是让整行滚动 —— 面板 280 宽时
+       第一颗「全部 6」被挤成只剩计数，分类名展示不全（真机反馈）。 */
+    flex: none;
+
+    /* 选中 = 类型色浅底 + 同色描边 + 同色字（永久态 → 写默认变量）。
+       改前是 `currentColor` 描边 + 正文色字：一屏彩色 chip 里只有选中那颗变成
+       黑白药丸，和主题色阶脱节（真机反馈「格格不入」）。色相由 EntityTypeChip
+       以内联 `--nv-chip-color` 给出；「全部」没有类型色，回退主色。
+       ⚠️ 只改颜色，不改字号 / 字重 / 边框宽度：12px 下加粗或换线宽会让 chip
+       宽 1~2px，点一下整行重排（与 hover 抖动同源）。 */
+    &.is-on {
+      --ant-button-default-bg: color-mix(
+        in srgb,
+        var(--nv-chip-color, var(--app-primary)) 10%,
+        var(--app-surface)
+      );
+      --ant-button-default-hover-bg: color-mix(
+        in srgb,
+        var(--nv-chip-color, var(--app-primary)) 16%,
+        var(--app-surface)
+      );
+      --ant-button-default-active-bg: color-mix(
+        in srgb,
+        var(--nv-chip-color, var(--app-primary)) 20%,
+        var(--app-surface)
+      );
+      --ant-button-default-color: var(--nv-chip-color, var(--app-primary));
+      --ant-button-default-hover-color: var(--nv-chip-color, var(--app-primary));
+      --ant-button-default-active-color: var(--nv-chip-color, var(--app-primary));
+      --ant-button-default-border-color: color-mix(
+        in srgb,
+        var(--nv-chip-color, var(--app-primary)) 40%,
+        var(--app-border)
+      );
+      --ant-button-default-hover-border-color: color-mix(
+        in srgb,
+        var(--nv-chip-color, var(--app-primary)) 58%,
+        var(--app-border)
+      );
+      --ant-button-default-active-border-color: color-mix(
+        in srgb,
+        var(--nv-chip-color, var(--app-primary)) 58%,
+        var(--app-border)
+      );
+    }
+
+    em {
+      font-style: normal;
+      font-size: 12px;
+      /* 计数与分类名之间必须有间距：「角色3」挤在一起是密集感的主因 */
+      margin-left: 4px;
+      color: var(--app-text-disabled);
+    }
+
+    &.is-on em {
+      color: inherit;
+      opacity: 0.7;
+    }
+  }
+
+  /* 按压反馈只走 antd 的 active 底色（`--ant-button-default-active-bg`）。
+     ⚠️ 不要加 `transform: scale()`：缩放在横向 chips 行里就是「宽度在变」，
+     相邻 chip 会跟着视觉位移，点一次像整行抖了一下。 */
+
+  /* ── 分区标题 ─────────────────────────────────────────────────── */
+  .nv-sechead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 14px 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    color: var(--app-text-disabled);
+
+    em {
+      font-style: normal;
+      margin-left: auto;
+      letter-spacing: 0;
+      font-weight: 400;
+    }
+  }
+
+  /* ── 空态 ─────────────────────────────────────────────────────── */
+  .nv-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 34px 20px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--app-text-disabled);
+
+    b {
+      font-size: 14px;
+      color: var(--app-text-muted);
+      font-weight: 600;
+    }
+
+    /* 空态引导文案（REQ-049）：比正文更弱一档，不作为主信息 */
+    &__hint {
+      color: var(--app-text-muted);
+      line-height: 1.6;
+    }
+
+    /* 空态直达按钮：这是空态里的主行动点，用描边 pill 表达「可点」，
+       与面板头那颗纯文字入口视觉上呼应又不重复计数 */
+    &__cta.ant-btn {
+      @include widget.ant-button-reset;
+      --ant-control-height: 28px;
+      --ant-button-padding-inline: 12px;
+      --ant-button-content-font-size: 12px;
+      --ant-button-font-weight: 500;
+      --ant-button-icon-gap: 5px;
+      --ant-border-radius: 8px;
+      --ant-line-width: 1px;
+      --ant-button-default-bg: transparent;
+      --ant-button-default-color: var(--app-primary);
+      --ant-button-default-border-color: var(--app-primary);
+      --ant-button-default-hover-bg: var(--app-primary-weak);
+      --ant-button-default-hover-color: var(--app-primary);
+      --ant-button-default-hover-border-color: var(--app-primary);
+      --ant-button-default-active-bg: var(--app-primary-weak);
+      --ant-button-default-active-color: var(--app-primary);
+      --ant-button-default-active-border-color: var(--app-primary);
+      --ant-button-default-shadow: none;
+
+      margin-top: 4px;
+      display: inline-flex;
+      align-items: center;
+    }
+  }
+
+  /* ── 行内图标按钮（悬停浮出的快捷操作）────────────────────────── */
+  .nv-mini.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: 24px;
+    --ant-border-radius: 7px;
+    --ant-button-default-bg: transparent;
+    --ant-button-default-color: var(--app-text-disabled);
+    --ant-button-default-hover-bg: var(--app-surface-hover);
+    --ant-button-default-hover-color: var(--app-text);
+    --ant-button-default-active-bg: var(--app-surface-hover);
+    --ant-button-default-active-color: var(--app-text);
+    width: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    & > svg,
+    & > .anticon {
+      width: 13px;
+      height: 13px;
+      font-size: 14px;
+    }
+
+    /* 开态（置顶 / 收藏 / 主角）是永久高亮：写默认变量，
+       antd 的 hover / active 读同一份变量，才不会被它们压回常态 */
+    &.is-on {
+      --ant-button-default-bg: var(--app-primary-weak);
+      --ant-button-default-color: var(--app-primary);
+      --ant-button-default-hover-bg: var(--app-primary-weak);
+      --ant-button-default-hover-color: var(--app-primary);
+      --ant-button-default-active-bg: var(--app-primary-weak);
+      --ant-button-default-active-color: var(--app-primary);
+    }
+
+    /* 只剩 antd 不接管的属性（§6.1.2）：禁用态压暗；
+       光标交给组件库的 not-allowed 语义 */
+    &:disabled {
+      opacity: 0.35;
+    }
+  }
+
+  /* 破坏性动作（删除）：悬停 / 按下转错误色，同样只改变量 */
+  .nv-mini--warn.ant-btn {
+    --ant-button-default-hover-bg: var(--app-error-weak);
+    --ant-button-default-hover-color: var(--app-error);
+    --ant-button-default-active-bg: var(--app-error-weak);
+    --ant-button-default-active-color: var(--app-error);
+  }
+
+  /* ── 键值行（详情字段 / 说明）──────────────────────────────────── */
+  .nv-kv {
+    display: flex;
+    gap: 10px;
+    padding: 5px 0;
+    font-size: 12px;
+
+    &__k {
+      flex: none;
+      width: 44px;
+      padding-top: 1px;
+      color: var(--app-text-disabled);
+      font-size: 12px;
+    }
+
+    &__v {
+      flex: 1;
+      min-width: 0;
+      line-height: 1.65;
+      color: var(--app-text-secondary);
+      word-break: break-word;
+    }
+  }
+
+  /* ── 幽灵按钮（详情区底部动作）────────────────────────────────── */
+  .nv-ghost.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: 30px;
+    --ant-button-padding-inline: 12px;
+    --ant-button-content-font-size: 12px;
+    --ant-button-icon-gap: 5px;
+    --ant-border-radius: 9px;
+    --ant-line-width: 1px;
+    --ant-button-default-bg: var(--app-surface);
+    --ant-button-default-color: var(--app-text-secondary);
+    --ant-button-default-border-color: var(--app-border);
+    --ant-button-default-hover-bg: var(--app-surface);
+    --ant-button-default-hover-color: var(--app-primary);
+    --ant-button-default-hover-border-color: var(--app-primary);
+    --ant-button-default-active-bg: var(--app-surface);
+    --ant-button-default-active-color: var(--app-primary);
+    --ant-button-default-active-border-color: var(--app-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    /* 纯图标用法（旁边还有主按钮时）：收窄内边距 → 30×30 的方形，
+       既不抢主按钮的宽度，也不至于缩成一颗裸图标。
+       ⚠️ 修饰符必须嵌套在这里、与其它控件变量同一个选择器：搬到别处
+       （如子面板的 `.xxx.ant-btn`）会与这条规则权重相同，胜负取决于
+       打包顺序，表现是「有时生效有时不生效」。 */
+    &.nv-ghost--icon {
+      --ant-button-padding-inline: 8px;
+      --ant-button-icon-gap: 0px;
+    }
+
+    /* 开态（标注高亮已开）：永久高亮 → 默认 / hover / active 同一套值 */
+    &.is-on {
+      --ant-button-default-bg: var(--app-primary-weak);
+      --ant-button-default-color: var(--app-primary);
+      --ant-button-default-border-color: var(--app-primary);
+      --ant-button-default-hover-bg: var(--app-primary-weak);
+      --ant-button-default-hover-color: var(--app-primary);
+      --ant-button-default-hover-border-color: var(--app-primary);
+      --ant-button-default-active-bg: var(--app-primary-weak);
+      --ant-button-default-active-color: var(--app-primary);
+      --ant-button-default-active-border-color: var(--app-primary);
+    }
+
+    /* 危险动作（删除资料卡）：文字与描边走 error 语义色，hover 才铺底色。
+       与 `.is-on` 同一层嵌套的理由一样 —— 控件变量必须跟 reset 同一选择器。 */
+    &.nv-ghost--danger {
+      --ant-button-default-color: var(--app-error);
+      --ant-button-default-border-color: color-mix(
+        in srgb,
+        var(--app-error) 34%,
+        var(--app-border)
+      );
+      --ant-button-default-hover-bg: var(--app-error-weak);
+      --ant-button-default-hover-color: var(--app-error);
+      --ant-button-default-hover-border-color: var(--app-error);
+      --ant-button-default-active-bg: var(--app-error-weak);
+      --ant-button-default-active-color: var(--app-error);
+      --ant-button-default-active-border-color: var(--app-error);
+    }
+  }
+}

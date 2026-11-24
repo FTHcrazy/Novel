@@ -1,0 +1,112 @@
+// 选区右键菜单：mask 铺满 stage 抓取点击，菜单本体相对 stage 绝对定位。
+// 层级关系：SelectionToolbar 已下线，本菜单接替其 45+ 层级位。
+//
+// 菜单项是 antd Button：先用清零点 mixin 归零组件级变量，再声明自己的值。
+// hover / disabled 不写属性规则 —— antd 的状态选择器是 (0,4,0)，自写规则压不过，
+// 只能改它读取的 --ant-button-* 变量（禁用文字色走 antd 自己的
+// --ant-color-text-disabled，ThemeProvider 已把它映射到 --app-text-disabled）。
+@use "../../../../../../shared/styles/widget" as widget;
+
+.nv-ctxmenu__mask {
+  position: absolute;
+  inset: 0;
+  z-index: 48;
+  background: transparent;
+}
+
+.nv-ctxmenu {
+  position: absolute;
+  z-index: 49;
+  min-width: 188px;
+  max-width: 248px;
+  /* 兜底：JS 实测落位失效时也不许越出 stage 下沿（菜单项一旦被裁就点不到） */
+  max-height: calc(100% - 16px);
+  box-sizing: border-box;
+  /* 菜单比 stage 还高时（绑定列表很长）内部滚动，而不是被 overflow:hidden 切掉 */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-chip);
+  background: var(--app-surface-elevated);
+  box-shadow: var(--app-shadow-pop);
+
+  &__selection {
+    margin: 0;
+    padding: 5px 6px 7px;
+    border-bottom: 1px dashed var(--app-border);
+    color: var(--app-text-secondary);
+    font-size: 12px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  &__label {
+    margin: 8px 6px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--app-text-muted);
+  }
+
+  &__types {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+  }
+
+  /* O-17：右键菜单底部的键帽提示（非交互行，纯说明） */
+  &__shortcut {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 6px 2px;
+    font-size: 12px;
+    color: var(--app-text-muted);
+  }
+
+  &__kbd {
+    padding: 1px 5px;
+    border: 1px solid var(--app-border-strong);
+    border-radius: 4px;
+    background: var(--app-surface-alt);
+    color: var(--app-text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  &__item.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: auto;
+    --ant-border-radius: 5px;
+    --ant-button-content-font-size: 12px;
+    --ant-button-default-color: var(--app-text);
+    --ant-button-default-hover-bg: var(--app-surface-hover);
+    --ant-button-default-active-bg: var(--app-surface-hover);
+    --ant-button-default-shadow: none;
+
+    display: flex;
+    gap: 7px;
+    padding: 5px 7px;
+    text-align: left;
+
+    &:focus-visible {
+      outline: 2px solid var(--app-primary);
+      outline-offset: -2px;
+    }
+  }
+
+  &__dot {
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border-radius: 50%;
+  }
+
+  &__go {
+    flex: none;
+    font-size: 12px;
+    color: var(--app-text-muted);
+  }
+}

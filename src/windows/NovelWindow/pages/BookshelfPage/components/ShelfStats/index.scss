@@ -1,0 +1,95 @@
+.bs-stats {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  user-select: none;
+
+  &__card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-panel);
+    box-shadow: var(--app-shadow-card);
+  }
+
+  &__icon {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--app-radius-item);
+    font-size: 18px;
+
+    &--blue {
+      background: var(--app-primary-weak);
+      color: var(--app-primary);
+    }
+
+    &--green {
+      background: var(--app-accent-green-weak);
+      color: var(--app-accent-green);
+    }
+
+    &--orange {
+      background: var(--app-accent-amber-weak);
+      color: var(--app-accent-amber);
+    }
+
+    &--purple {
+      background: var(--app-accent-purple-weak);
+      color: var(--app-accent-purple);
+    }
+  }
+
+  &__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  &__value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--app-text);
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  &__label {
+    font-size: 12px;
+    color: var(--app-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 最小窗口：四连卡每格只剩约 140px，图标 36 + 间距 12 + 内边距 32 之后
+     文字区不到 60（「累计作品」正好 48px 但一放大字号就换行）。
+     收一档图标与内边距，保持四列不折行 —— 折成 2×2 会多吃一行高度，
+     与「矮窗优先露出书卡」的目标相冲突。 */
+  @media (max-width: 1080px) {
+    gap: 10px;
+
+    &__card {
+      gap: 10px;
+      padding: 12px;
+    }
+
+    &__icon {
+      width: 32px;
+      height: 32px;
+      font-size: 16px;
+    }
+
+    &__value {
+      font-size: 16px;
+    }
+  }
+}

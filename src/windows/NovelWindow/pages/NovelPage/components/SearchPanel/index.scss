@@ -1,0 +1,145 @@
+@use "../../../../../../shared/styles/widget" as widget;
+
+/* 全书检索面板（NL 设计稿 §3·检索）
+
+   按钮类（.nv-search__hit）由 antd `Button` 承载：外观只通过
+   组件级 CSS 变量配置，不写 `:hover` / `:disabled` 属性规则——antd 的状态选择器
+   是 (0,4,0) 级，自写规则压不过它们（AGENTS §6.1.2）。
+   聚焦环同样交给组件库（`:focus-visible` 规则读 --ant-line-width-focus）。 */
+
+.nv-search {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  &__box {
+    flex: none;
+  }
+
+  &__count {
+    flex: none;
+    font-size: 12px;
+    color: var(--app-text-muted);
+    white-space: nowrap;
+  }
+
+  &__scopes {
+    flex: none;
+    margin-top: 8px;
+
+    /* 禁用态（未选章时的「本章」）：文字色走 --ant-color-text-disabled ——
+       Segmented 的 :disabled 规则读的正是这个全局 token（没有分段项级的
+       变量可改），写在根上会由变量继承下发到每个 item。
+       自写 :disabled 属性规则在这里压不过组件库，故不写。 */
+    --ant-color-text-disabled: var(--app-text-disabled);
+  }
+
+  &__pending {
+    display: grid;
+    gap: 6px;
+
+    i {
+      display: block;
+      height: 12px;
+      border-radius: 6px;
+      background: var(--app-surface-hover);
+      animation: nv-search-pulse 1.2s ease-in-out infinite;
+    }
+  }
+
+  &__list {
+    flex: 1;
+    min-height: 0;
+  }
+
+  &__item {
+    /* 顶部 2px 呼吸位：第一条 hover 上浮 1px + 投影时，
+       边框不会被虚拟列表视口的上边缘裁掉 */
+    padding: 2px 0 6px;
+  }
+
+  &__hit.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-border-radius: var(--app-radius-item);
+    --ant-line-width: 1px;
+    --ant-button-default-bg: var(--app-surface);
+    --ant-button-default-color: var(--app-text);
+    --ant-button-default-border-color: var(--app-border);
+    --ant-button-default-hover-bg: var(--app-surface);
+    --ant-button-default-hover-color: var(--app-text);
+    --ant-button-default-hover-border-color: var(--app-primary);
+    --ant-button-default-active-bg: var(--app-surface);
+    --ant-button-default-active-color: var(--app-text);
+    --ant-button-default-active-border-color: var(--app-primary);
+    /* 命中卡靠恒定投影托起：antd 只有一个不分状态的 shadow 变量 */
+    --ant-button-default-shadow: var(--app-shadow-card);
+    display: block;
+    width: 100%;
+    padding: 9px 10px;
+    text-align: left;
+  }
+
+  /* 悬停浮起：transform antd 不接管（§6.1.2 允许保留） */
+  &__hit:hover {
+    transform: translateY(-1px);
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__chapter {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  &__kind {
+    flex: none;
+    padding: 0 6px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  &__n {
+    flex: none;
+    margin-left: auto;
+    padding: 0 6px;
+    border-radius: var(--app-radius-pill);
+    background: var(--app-primary-weak);
+    color: var(--app-primary);
+    font-size: 12px;
+  }
+
+  &__snippet {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 5px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--app-text-secondary);
+
+    mark {
+      padding: 0 1px;
+      border-radius: 3px;
+      background: var(--app-warning-weak);
+      color: var(--app-warning);
+      font-weight: 600;
+    }
+  }
+}
+
+@keyframes nv-search-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}

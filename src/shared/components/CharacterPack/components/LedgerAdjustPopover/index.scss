@@ -1,0 +1,57 @@
+/* 记账 / 盘点 Popover（antd portal 浮层：样式写在组件根选择器之外；
+   no-drag 豁免由 WindowHeader 的 PORTAL_OVERLAYS 对 .ant-popover 统一登记） */
+
+.lq-pop .ant-popover-inner {
+  border-radius: var(--app-radius-panel);
+}
+
+.lq-adjust {
+  width: 248px;
+}
+
+.lq-adjust__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text-strong);
+  margin-bottom: 8px;
+}
+
+.lq-adjust__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.lq-adjust__label {
+  flex: none;
+  width: 52px;
+  font-size: 12px;
+  color: var(--app-text-secondary);
+}
+
+.lq-adjust__input {
+  flex: 1;
+}
+
+.lq-adjust__preview {
+  margin-top: 8px;
+  padding: 5px 8px;
+  border-radius: var(--app-radius-item);
+  background: var(--app-accent-blue-weak);
+  color: var(--app-accent-blue);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.lq-adjust__preview--ok {
+  background: var(--app-accent-green-weak);
+  color: var(--app-accent-green);
+}
+
+.lq-adjust__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+}

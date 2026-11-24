@@ -1,0 +1,422 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ToastPayload } from "@/shared/novel/use-auto-toast";
+import { useAutoToast } from "@/shared/novel/use-auto-toast";
+import { LAYOUT, PANEL_WIDTH, TOAST_DURATION_MS } from "../novel-config";
+import { clampPanelWidth, parseJsonOrNull } from "../novel-utils";
+import { fetchPanelWidth, savePanelWidth } from "../services/novel-service";
+import type { EntityType } from "../types";
+
+export type PanelTab =
+  | "outline"
+  | "entity"
+  | "note"
+  | "search"
+  | "tools";
+/**
+ * 工具箱二级面板：null = 启动器首页。
+ *
+ * 提升到视图状态（原先是 SupportPanel 内部 state）是为了让底部状态条上的
+ * 敏感词角标能一键直达面板 —— 不必先切到「工具」Tab 再点卡片。
+ */
+export type ToolSub =
+  | "naming"
+  | "sensitive"
+  /** 一致性校对（R-AI-10a，纯本地） */
+  | "consistency"
+  /** 从本章抽取设定（R-AI-08） */
+  | "extract"
+  | null;
+export type EntityFilter = EntityType | "all";
+// 类型出处已收口到共享 hook（P3-3）；此处 re-export 保持 NovelToast 的 import 路径不变
+export type { ToastPayload } from "@/shared/novel/use-auto-toast";
+export type ToastTone = ToastPayload["tone"];
+
+/**
+ * 小说编辑器视图状态 Hook
+ *
+ * 负责：三栏折叠、专注 / 打字机模式、右栏 Tab 与筛选、浮层与抽屉开关、
+ * 轻提示队列。全部是展示层状态，不触达数据，也不保存。
+ */
+export function useNovelViewState() {
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  // 全局标注层开关（需求稿 §2 风险对策：提供一键关闭标注层）。
+  // 当前为会话级视图态，未并入 R5 settings 持久化——保持最小落地；
+  // 后续若需跨会话记忆，并入 EditorSettings.annotationOn 即可。
+  const [annotationOn, setAnnotationOn] = useState(true);
+  const [panelTab, setPanelTab] = useState<PanelTab>("entity");
+  /**
+   * 首屏 Tab 是否已按数据定过（O-14）。
+   *
+   * 初值只能给一个常量，但「该落在哪」要等数据装载完才知道：新书 0 个要素时
+   * 默认停在「要素」= 首屏一张空列表，等于告诉作者「这里没什么可看的」。
+   * 所以装载完成后由页面调一次 `seedPanelTab`（有要素 → 要素，否则 → 大纲），
+   * 之后用户自己切过就再也不干预 —— 否则每次增删要素都会把 Tab 拽回去。
+   */
+  const panelTabSeededRef = useRef(false);
+  /** 工具箱二级面板（起名器 / 敏感词检测） */
+  const [toolSub, setToolSub] = useState<ToolSub>(null);
+  const [entityFilter, setEntityFilter] = useState<EntityFilter>("all");
+  const [detailEntityId, setDetailEntityId] = useState<string | null>(null);
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  /** 设定中心浮层（取代原「等级体系管理」弹框） */
+  const [settingCenterOpen, setSettingCenterOpen] = useState(false);
+  /**
+   * 打开设定中心时要聚焦的分类 id
+   *
+   * 从角色卡「新建境界体系 / 管理」进来时传 realm 分类 id —— 直接落到境界
+   * 阶梯上，而不是让作者在分类列表里再找一遍。
+   */
+  const [settingFocusId, setSettingFocusId] = useState<string | null>(null);
+  /** 自定义类型管理弹框（R23） */
+  const [typeManagerOpen, setTypeManagerOpen] = useState(false);
+
+  /**
+   * 右栏宽度（支撑面板改版）：基准 340，可拖拽 280–460。
+   *
+   * 属于视图状态而非排版设置，所以不并进 EditorSettings——持久化另走
+   * config 的 `novel_panel_width` 键，与其他 view 状态一样由本 Hook 自持。
+   * 拖拽过程只改内存，停手 300ms 后才落库（避免一次拖拽打出几十次 IPC）。
+   */
+  const [rightWidth, setRightWidthState] = useState<number>(
+    LAYOUT.rightRailWidth,
+  );
+  const widthLoadedRef = useRef(false);
+
+  // 小屏自适应用的镜像 / 记忆 ref：effect 里读到最新值，又不把状态塞进依赖
+  const leftOpenRef = useRef(leftOpen);
+  const rightOpenRef = useRef(rightOpen);
+  const rightWidthRef = useRef(rightWidth);
+  const autoCollapsedRef = useRef(false);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    leftOpenRef.current = leftOpen;
+  }, [leftOpen]);
+
+  useEffect(() => {
+    rightOpenRef.current = rightOpen;
+  }, [rightOpen]);
+
+  useEffect(() => {
+    rightWidthRef.current = rightWidth;
+  }, [rightWidth]);
+
+  // 宽度恢复：loadedRef 门禁保证首帧的基准值不会先盖掉用户上次拖出来的宽度
+  useEffect(() => {
+    let cancelled = false;
+    void fetchPanelWidth()
+      .then((raw) => {
+        if (cancelled) return;
+        setRightWidthState(clampPanelWidth(parseJsonOrNull(raw)));
+      })
+      .catch(() => {
+        // IPC 失败：保持基准宽度，拖拽链路照常可用
+      })
+      .finally(() => {
+        if (!cancelled) widthLoadedRef.current = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!widthLoadedRef.current) return undefined;
+    const timer = window.setTimeout(() => {
+      void savePanelWidth(rightWidth);
+    }, PANEL_WIDTH.debounceMs);
+    return () => window.clearTimeout(timer);
+  }, [rightWidth]);
+
+  // 卸载兜底：拖完立刻关窗 / 切回书架时，300ms 防抖还没到点就被 clearTimeout
+  // 取消了，最后一次拖动的宽度会丢（位置记忆有 beforeunload 兜底，宽度没有）
+  useEffect(
+    () => () => {
+      if (!widthLoadedRef.current) return;
+      void savePanelWidth(rightWidthRef.current);
+    },
+    [],
+  );
+
+  // 轻提示：计时 / 清理由共享 hook 收口（P3-3），时长沿用本页节奏 2.4s
+  const { toast, showToast, closeToast } = useAutoToast(TOAST_DURATION_MS);
+
+  const toggleLeft = useCallback(() => {
+    // 用户手动开合即接管：此后窗口变化不再还原左栏状态
+    autoCollapsedRef.current = false;
+    setLeftOpen((open) => !open);
+  }, []);
+  const toggleRight = useCallback(() => setRightOpen((open) => !open), []);
+  /** 拖拽右栏边界：只更新内存宽度（夹取到 280–460），落库由上面 effect 防抖接管 */
+  const setRightWidth = useCallback((next: number) => {
+    setRightWidthState(clampPanelWidth(next));
+  }, []);
+
+  const toggleAnnotation = useCallback(() => setAnnotationOn((on) => !on), []);
+
+  /**
+   * 小屏自适应：三栏放不下时自动收起左栏给码字区让位。
+   *
+   * 判据是「窗口宽 - 当前占用的栏宽 < 正文最小可用宽度」，而不是写死一个
+   * 窗口宽度阈值——右栏是用户按需打开的，它一开可用宽度立刻少一个面板宽
+   * （拖宽到 460 时更挤），这时才收起左栏才是对的。左栏收起由本 effect 负责，右栏永不自动收
+   * （用户刚点开的面板立刻消失会被当成 bug）。
+   * 手动开合过左栏（toggleLeft）之后本机制即失效，交给用户自己决定。
+   */
+  useEffect(() => {
+    const sync = (): void => {
+      const railBudget =
+        LAYOUT.leftRailWidth +
+        (rightOpenRef.current ? rightWidthRef.current : 0);
+      const tight = window.innerWidth - railBudget < LAYOUT.minStageWidth;
+
+      if (tight) {
+        if (!leftOpenRef.current) return;
+        autoCollapsedRef.current = true;
+        setLeftOpen(false);
+        // 首次同步（挂载）不提示：窗口本来就小不是「刚发生的变化」
+        if (mountedRef.current) showToast("窗口较窄，已收起章节树", "info");
+        return;
+      }
+      // 宽回来只还原「被自动收起」的那次，不覆盖用户手动收起
+      if (!autoCollapsedRef.current) return;
+      autoCollapsedRef.current = false;
+      setLeftOpen(true);
+    };
+
+    // 先同步再置位：挂载那一次不算「窗口变窄」，不提示
+    sync();
+    mountedRef.current = true;
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+    // ⚠️ 依赖必须是空：拖右栏时 rightWidth 每帧都变，写在依赖里就是「每帧
+    // 解绑再重绑一次 resize 监听」（拖一次几十次 add/removeEventListener）。
+    // 宽度与开关都从 ref 读，ref 在下面的同步 effect 里已更新
+  }, []);
+
+  // 专注模式 hides 顶栏 / 状态条 / 左右栏；Esc 只退出专注，不关窗（需求稿 §2 零打断）
+  const toggleFocus = useCallback(() => {
+    setFocusMode((on) => !on);
+  }, []);
+
+  const exitFocus = useCallback(() => setFocusMode(false), []);
+
+  /**
+   * 打开要素详情。**必须一并切回「要素」tab**：
+   * 用户在右栏切到笔记 / 搜索 / 工具后，再去点正文里的高亮词，期望是「看到这个
+   * 要素的详情」。只开面板不切 tab，右栏会停在原 tab、详情渲染在看不见的地方，
+   * 表现为「点了没反应」。正文高亮与悬浮卡两条入口都收口到这里。
+   */
+  const openEntityDetail = useCallback((entityId: string) => {
+    setDetailEntityId(entityId);
+    setPanelTab("entity");
+    setRightOpen(true);
+  }, []);
+
+  const closeEntityDetail = useCallback(() => setDetailEntityId(null), []);
+
+  /**
+   * 右侧 300px 抽屉只有**一格位置**：`历史快照` 与 `排版与偏好` 都是
+   * `position:absolute; right:0; z-index:46` 的自绘浮层，两者同时 open 会完全重叠
+   * （后渲染的盖住前者）。表现就是真机反馈那一串怪象：点 ✕ 只关掉上面那个、
+   * 底下那个还在 → 「关不掉」；再点顶栏又叠一层 → 「怎么冒出历史快照」。
+   *
+   * 所以四个开关（open / toggle ×2）统一互斥：开 A 必关 B。
+   */
+  const openSnapshot = useCallback(() => {
+    setSettingsOpen(false);
+    setSnapshotOpen(true);
+  }, []);
+  const closeSnapshot = useCallback(() => setSnapshotOpen(false), []);
+  /** 顶栏历史按钮即开关：再点一次收起快照抽屉 */
+  const toggleSnapshot = useCallback(() => {
+    setSettingsOpen(false);
+    setSnapshotOpen((open) => !open);
+  }, []);
+  const openSettings = useCallback(() => {
+    setSnapshotOpen(false);
+    setSettingsOpen(true);
+  }, []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  /** 顶栏齿轮即开关：再点一次关闭（抽屉无遮罩时这是主要关闭途径之一） */
+  const toggleSettings = useCallback(() => {
+    setSnapshotOpen(false);
+    setSettingsOpen((open) => !open);
+  }, []);
+
+  /**
+   * 右侧那格抽屉的**唯一真相**：`settings` / `snapshot` 共用同一个位置
+   * （都是 `position:absolute; right:0; width:300px` 的自绘浮层），
+   * 只能有一个存在。
+   *
+   * 四个开关已经互斥，这里再按「settings 优先」收一次：渲染层读的是这个派生值
+   * 而不是两个布尔 —— 顶栏高亮与面板可见性因此**永远同源**，不会出现
+   * 「按钮不亮但面板还在」。万一将来又有人绕过开关直接 set，最多也只是
+   * 显示优先级变化，不会两个叠一屏。
+   */
+  const rightDrawer: "settings" | "snapshot" | null = settingsOpen
+    ? "settings"
+    : snapshotOpen
+      ? "snapshot"
+      : null;
+  /** 关闭右侧抽屉：一次关干净（关掉排版不该露出底下那个快照） */
+  const closeRightDrawer = useCallback(() => {
+    setSettingsOpen(false);
+    setSnapshotOpen(false);
+  }, []);
+  const openJump = useCallback(() => setJumpOpen(true), []);
+  const closeJump = useCallback(() => setJumpOpen(false), []);
+
+  /** 打开设定中心；focusId 传 realm 分类 id 即直接落到境界阶梯 */
+  const openSettingCenter = useCallback((focusId: string | null = null) => {
+    setSettingFocusId(focusId);
+    setSettingCenterOpen(true);
+  }, []);
+  const closeSettingCenter = useCallback(() => {
+    setSettingCenterOpen(false);
+    setSettingFocusId(null);
+  }, []);
+  /**
+   * 顶栏「本书设定」即开关：再点一次收起（与「快照」「排版」一致）。
+   *
+   * REQ-050 修法 ③ 的正面要求：这两颗原本「只开不关」的按钮缺 toggle 语义，
+   * 让「再点一次」表现得像「第一次无效」。改成 toggle 后与另两颗行为对齐。
+   * 开时清掉聚焦分类（从顶栏进来的通用入口不该停在某个分类上）。
+   */
+  const toggleSettingCenter = useCallback(() => {
+    setSettingCenterOpen((open) => {
+      if (open) setSettingFocusId(null);
+      return !open;
+    });
+  }, []);
+  const openTypeManager = useCallback(() => setTypeManagerOpen(true), []);
+  const closeTypeManager = useCallback(() => setTypeManagerOpen(false), []);
+
+  /**
+   * 页内浮层（REQ-053）：`设定中心` 与 `自定义类型管理` 都是 **带遮罩的 antd Modal**。
+   *
+   * 与「快照 / 排版」那两个**无遮罩**抽屉不同，它们会给整个视口盖一层
+   * `.ant-modal-wrap`（`position: fixed; inset: 0`），顶栏按钮也在它的命中范围里。
+   * 于是「浮层开着时点顶栏功能按钮」的第一击会被 wrap 自己收走（wrap 点空白即关），
+   * 按钮拿不到 click —— 这正是「行囊 / 小说设定要点两次」在 Modal 路径上的残留。
+   *
+   * 两侧分工：
+   * - **布局**：浮层打开时把顶栏抬到 wrap 之上（`NovelPage/index.scss` 的
+   *   `.nv-page.is-overlay`），让点击能落到按钮本身；
+   * - **语义**：点击落在顶栏上即「离开当前浮层」，先收浮层再执行按钮动作
+   *   （`NovelTopBar` 的 click 捕获阶段统一调本函数）。
+   *
+   * 只在「浮层真的开着」时才有必要调；对已关闭的浮层是空操作。
+   */
+  const dismissPageOverlays = useCallback(() => {
+    setSettingCenterOpen(false);
+    setSettingFocusId(null);
+    setTypeManagerOpen(false);
+  }, []);
+
+  /** 是否有「带遮罩的页内浮层」开着（顶栏要不要抬到遮罩之上，看它） */
+  const pageOverlayOpen = settingCenterOpen || typeManagerOpen;
+
+  const selectPanelTab = useCallback((tab: PanelTab) => {
+    setPanelTab(tab);
+    // 切 Tab 即退出工具箱二级面板，回到该 Tab 的首页
+    setToolSub(null);
+    setRightOpen(true);
+    // 用户自己选过就不再让首屏规则插手（见 panelTabSeededRef）
+    panelTabSeededRef.current = true;
+  }, []);
+
+  /**
+   * 首屏 Tab 按数据定一次（O-14）：有要素才落「要素」，否则落「大纲」。
+   *
+   * 为什么不在 useState 的初值里判：初值只能同步算，而要素是异步装载的 ——
+   * 开局恒为 0，任何「按要素数选」的初始化都只会得到「大纲」，老书作者
+   * 便再也回不到原本的默认。交给页面在 `loading` 转 false 后调一次最稳。
+   */
+  const seedPanelTab = useCallback((hasEntities: boolean) => {
+    if (panelTabSeededRef.current) return;
+    panelTabSeededRef.current = true;
+    if (!hasEntities) setPanelTab("outline");
+  }, []);
+
+  /**
+   * 直达工具面板（状态条角标 / 工具箱卡片共用）。
+   *
+   * 必须同时切到「工具」Tab 并展开右栏 —— 只设 toolSub 会让面板渲染在
+   * 看不见的 Tab 下，表现为「点了没反应」。
+   */
+  const openToolSub = useCallback((name: Exclude<ToolSub, null>) => {
+    setToolSub(name);
+    setPanelTab("tools");
+    setRightOpen(true);
+  }, []);
+
+  /** 返回工具箱首页（面板头左箭头） */
+  const closeToolSub = useCallback(() => setToolSub(null), []);
+
+  /** 打字机模式下额外让左右栏让位，避免视觉噪音 */
+  const effectiveLeftOpen = useMemo(
+    () => leftOpen && !focusMode,
+    [leftOpen, focusMode],
+  );
+  const effectiveRightOpen = useMemo(
+    () => rightOpen && !focusMode,
+    [rightOpen, focusMode],
+  );
+
+  return {
+    leftOpen: effectiveLeftOpen,
+    rightOpen: effectiveRightOpen,
+    rightWidth,
+    focusMode,
+    annotationOn,
+    panelTab,
+    toolSub,
+    entityFilter,
+    detailEntityId,
+    jumpOpen,
+    snapshotOpen,
+    settingsOpen,
+    rightDrawer,
+    closeRightDrawer,
+    settingCenterOpen,
+    settingFocusId,
+    typeManagerOpen,
+    pageOverlayOpen,
+    dismissPageOverlays,
+    toast,
+    toggleLeft,
+    toggleRight,
+    setRightWidth,
+    toggleFocus,
+    exitFocus,
+    toggleAnnotation,
+    selectPanelTab,
+    seedPanelTab,
+    openToolSub,
+    closeToolSub,
+    setToolSub,
+    setEntityFilter,
+    openEntityDetail,
+    closeEntityDetail,
+    openJump,
+    closeJump,
+    openSettingCenter,
+    closeSettingCenter,
+    toggleSettingCenter,
+    openTypeManager,
+    closeTypeManager,
+    openSnapshot,
+    closeSnapshot,
+    toggleSnapshot,
+    openSettings,
+    closeSettings,
+    toggleSettings,
+    showToast,
+    closeToast,
+  };
+}

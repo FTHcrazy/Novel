@@ -1,0 +1,62 @@
+// 「知道了」由 antd `Button` 承载（AGENTS §6.1.2）：先清零组件级变量再声明；
+// 底色 / 字色写成变量，自写 `:hover` 压不过 antd 的状态规则（0,4,0）
+@use "../../../../../../shared/styles/widget" as widget;
+
+.nv-recbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-size: 12px;
+  background: var(--app-warning-weak);
+  color: var(--app-warning);
+  border-bottom: 1px solid var(--app-border);
+
+  &__icon {
+    flex: none;
+  }
+
+  &__text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__ack.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: auto;
+    /* 原生 button 的 UA 内边距是 1px 6px，清零后要还回来，否则
+       「知道了」会贴到横幅右边缘（横幅自身 padding 只留 14px） */
+    --ant-button-padding-inline: 6px;
+    --ant-button-content-font-size: 12px;
+    --ant-border-radius: 4px;
+    --ant-button-default-bg: transparent;
+    --ant-button-default-color: var(--app-warning);
+    --ant-button-default-hover-bg: transparent;
+    --ant-button-default-hover-color: var(--app-warning);
+    --ant-button-default-active-bg: transparent;
+    --ant-button-default-active-color: var(--app-warning);
+    --ant-button-default-shadow: none;
+
+    /* antd 不接管的属性 */
+    margin-left: auto;
+    flex: none;
+    text-decoration: underline;
+    opacity: 0.85;
+    cursor: pointer;
+    transition: opacity var(--app-t-fast) var(--app-ease-standard);
+  }
+
+  /* 只改 opacity：它不是组件库接管的属性，留给属性规则即可 */
+  &__ack:hover {
+    opacity: 1;
+  }
+
+  &__ack:focus-visible {
+    outline: 2px solid var(--app-primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}

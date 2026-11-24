@@ -1,0 +1,698 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { App, Button, Input, Select } from "antd";
+import {
+  CopyOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SnippetsOutlined,
+  StarFilled,
+  StarOutlined,
+  ThunderboltOutlined,
+} from "@ant-design/icons";
+import SvgIcon from "@/shared/components/SvgIcon";
+import aiSvg from "@/assets/novel/ai.svg?raw";
+import {
+  NAMING_DICTIONARY,
+  NAMING_KINDS,
+  NAMING_STYLES,
+} from "../../naming/data/dictionary";
+import {
+  generateNames,
+  generateNextBatch,
+  isKindSupported,
+} from "../../naming/name-generator";
+import type {
+  NameFavorite,
+  NameGender,
+  NameStyle,
+  NamingKind,
+  NamingResult,
+  NamingSource,
+} from "../../naming/types";
+import { aiGenerateStructured } from "@/shared/ai/ai-client";
+import {
+  buildPromptSpec,
+  collectBookContext,
+  type BookSnapshot,
+} from "@/shared/ai/context";
+import "./index.scss";
+
+/**
+ * 起名工具动作组：由页面组合层注入，面板本身不接触数据层
+ * （与 InspirationActions 同范式：actions 由 useNovelPage 编排，复用既有 hooks）。
+ */
+export interface NamingActions {
+  /** 把名字插入到正文光标处（EditorPane 命令式 ref，主进程不参与） */
+  onInsertToEditor: (name: string) => void;
+  /**
+   * 把「名字：寓意」插入到正文光标处。
+   *
+   * 寓意本身就是一句话的人设/命名释义（AI 起名的产出物），作者常要把它写进
+   * 人物出场段或设定清单；此前只能复制出来手动拼，等于白给。
+   */
+  onInsertMeaning: (name: string, meaning: string) => void;
+  /** 把名字建为角色卡（type=character，名字带入；复用 handleSaveEntity） */
+  onCreateCharacter: (name: string) => void;
+  /** 加入收藏夹（按作品持久化；source 标记 AI/本地来源） */
+  onAddFavorite: (name: string, kind: NamingKind, style: NameStyle, source?: NamingSource) => void;
+  /** 移除收藏夹 */
+  onRemoveFavorite: (favoriteId: string) => void;
+  /**
+   * 打开「AI 配置」页（R-AI-02 FR-04 的「去设置」出口）。
+   *
+   * 可选：面板不知道设置窗口怎么开（那是窗口层的知识），由页面层注入；
+   * 测试或不提供该能力时按钮不渲染，而不是渲染一个点了没反应的按钮。
+   */
+  onOpenAiSettings?: () => void;
+}
+
+interface NameGeneratorPanelProps {
+  /** 避开本书已用名：当前作品的全部要素名 + 别名 */
+  exclude: string[];
+  /** 收藏夹（当前作品）：按 createdAt 倒序 */
+  favorites: NameFavorite[];
+  actions: NamingActions;
+  /**
+   * 本书上下文快照（书名 / 要素 / 境界 / 已用名）。
+   * 由页面层组装传入，AI 起名时自动灌入 prompt —— 作者不必每次手填要求。
+   */
+  book?: BookSnapshot;
+  /**
+   * AI 入口是否**存在**（REQ-063）。false 时「AI 起名」按钮与它的描述输入框
+   * 都不渲染 —— 本地起名引擎（换一批）照常可用，这个面板本来就是本地优先。
+   *
+   * 与 `aiAvailable` 的分工：`aiVisible` 管「这个功能该不该出现」（总开关关 /
+   * 本版本没有 AI 通道）；`aiAvailable` 管「出现了但这次用不了」（开关开着还没
+   * 配全），那种情况留可点的禁用按钮 + 原因，用户才知道去补配置。
+   */
+  aiVisible?: boolean;
+  /**
+   * AI 是否可用（M8 门控）。false 时「AI 起名」按钮禁用并说明原因，
+   * 但**本地起名引擎照常可用**（起名有本地兜底，不整块隐藏）。
+   */
+  aiAvailable?: boolean;
+  /** AI 不可用的一句话说明（挂按钮 title） */
+  aiUnavailableText?: string;
+}
+
+/** 性别选项（仅 person 生效；其它类型自动锁定 any） */
+const GENDER_OPTIONS: Array<{ value: NameGender; label: string }> = [
+  { value: "any", label: "随机" },
+  { value: "male", label: "男" },
+  { value: "female", label: "女" },
+];
+
+/** 一次生成的数量（需求稿 R18 一次给 10 个） */
+const COUNT_OPTIONS = [6, 10, 12] as const;
+
+/** 生成参数的完整集合：选项切换时必须整体显式传入，禁止从闭包里读旧值 */
+interface NamingOptionSet {
+  kind: NamingKind;
+  style: NameStyle;
+  gender: NameGender;
+  count: number;
+}
+
+/** 初始生成参数（需求稿默认：仙侠风格的人名，一次 10 个） */
+const INITIAL_OPTIONS: NamingOptionSet = {
+  kind: "person",
+  style: "xianxia",
+  gender: "any",
+  count: 10,
+};
+
+/** 风格回退：取该风格首个支持的类型 */
+function firstSupportedKind(style: NameStyle): NamingKind {
+  return NAMING_KINDS.find((k) => isKindSupported(style, k.id))?.id ?? "person";
+}
+
+/**
+ * 起名工具面板（需求稿 R18 / 步骤三）
+ *
+ * 卡名字时按风格随机起一批名并避开本书已用名：四维过滤
+ * （风格 × 类型 × 性别 × 避开已用），结果一次给 10 个，支持换一批与收藏。
+ * 双出口：插入正文光标处 / 一键建为角色卡（名称带入）。
+ * 入口在工具箱启动器，本面板是它的二级页面。
+ */
+export default function NameGeneratorPanel({
+  exclude,
+  favorites,
+  actions,
+  book,
+  aiVisible = true,
+  aiAvailable = true,
+  aiUnavailableText = "",
+}: NameGeneratorPanelProps) {
+  // 选项状态：组件局部短生命周期状态，不进全局（与 InspirationPanel 范式一致）
+  const [kind, setKind] = useState<NamingKind>(INITIAL_OPTIONS.kind);
+  const [style, setStyle] = useState<NameStyle>(INITIAL_OPTIONS.style);
+  const [gender, setGender] = useState<NameGender>(INITIAL_OPTIONS.gender);
+  const [count, setCount] = useState<number>(INITIAL_OPTIONS.count);
+
+  // 当前风格是否支持当前类型；不支持时回退到该风格首个支持的类型
+  const supportedKinds = useMemo(() => {
+    return NAMING_KINDS.filter((k) => isKindSupported(style, k.id));
+  }, [style]);
+
+  // 实际生效的 kind（与 supportedKinds 同步：风格切换后 kind 可能不再支持）
+  const effectiveKind = useMemo(() => {
+    if (isKindSupported(style, kind)) return kind;
+    return supportedKinds[0]?.id ?? "person";
+  }, [kind, style, supportedKinds]);
+
+  // 性别只在 person 生效；非 person 锁 any
+  const effectiveGender = effectiveKind === "person" ? gender : "any";
+
+  // 生成结果 + 当前 seed（用于换一批）
+  // seed 初值用常量 0，首次生成在挂载 effect 里触发，避免 render 期调用 Date.now()
+  const [results, setResults] = useState<NamingResult[]>([]);
+  const [seed, setSeed] = useState<number>(0);
+  const didInitRef = useRef(false);
+
+  // ── AI 起名（R-AI-02）：描述输入 + 加载态 + 降级提示 ──
+  const [description, setDescription] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [fallbackNote, setFallbackNote] = useState<string | null>(null);
+  const { message } = App.useApp();
+
+  /**
+   * 按「显式传入的参数」生成一批
+   *
+   * 关键点：选项切换（类型 / 风格 / 性别 / 数量）时，必须把变更后的值当参数传进来，
+   * 不能在 setTimeout 回调里读 regenerate 闭包——那会拿到切换前的旧选项，
+   * 表现为「列表动了一下，但内容还是上一个类型」。
+   */
+  const buildBatch = useCallback(
+    (options: NamingOptionSet, overrideSeed?: number) => {
+      const newSeed = overrideSeed ?? (Date.now() >>> 0);
+      setResults(generateNames({ ...options, exclude, seed: newSeed }));
+      setSeed(newSeed);
+    },
+    [exclude],
+  );
+
+  // 挂载后触发首次生成（render 期禁止调用 Date.now）
+  useEffect(() => {
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+    buildBatch(INITIAL_OPTIONS);
+  }, [buildBatch]);
+
+  // 换一批：基于当前 seed 派生新种子，结果不重复（同 exclude 下）
+  const handleNextBatch = useCallback(() => {
+    const next = generateNextBatch(
+      {
+        kind: effectiveKind,
+        style,
+        gender: effectiveGender,
+        count,
+        exclude,
+      },
+      seed,
+    );
+    setResults(next.results);
+    setSeed(next.seed);
+  }, [effectiveKind, style, effectiveGender, count, exclude, seed]);
+
+  /** 描述为空时走本地引擎（无提示） */
+  const fallbackToLocal = useCallback(
+    (note?: string) => {
+      const local = generateNames({
+        kind: effectiveKind,
+        style,
+        gender: effectiveGender,
+        count,
+        exclude,
+        seed: Date.now() >>> 0,
+      });
+      setResults(local);
+      setFallbackNote(note ?? null);
+    },
+    [effectiveKind, style, effectiveGender, count, exclude],
+  );
+
+  /**
+   * AI 起名（R-AI-02）：语义生成，失败降级本地引擎。
+   *
+   * 上下文自动灌入（R-AI-05）：书名 / 题材 / 本书要素 / 境界 / 已用名由
+   * `collectBookContext` 采集，作者**无需**每次手填描述——描述只是可选的补充。
+   */
+  const handleAiGenerate = useCallback(async () => {
+    setAiLoading(true);
+    setFallbackNote(null);
+
+    try {
+      const kindLabel = NAMING_KINDS.find((k) => k.id === effectiveKind)?.label;
+      const styleLabel = NAMING_STYLES.find((s) => s.id === style)?.label;
+      const genderLabel =
+        effectiveGender === "male"
+          ? "男"
+          : effectiveGender === "female"
+            ? "女"
+            : undefined;
+
+      // 采集本书上下文：面板传进来的 exclude 是当前作品口径，优先于快照派生结果
+      const collected = collectBookContext(
+        book ?? { workName: "", entities: [] },
+        "naming",
+      );
+      const context = {
+        ...collected,
+        ...(exclude.length > 0 ? { excludeNames: exclude.slice(0, 40) } : {}),
+      };
+
+      const spec = buildPromptSpec("naming", context, {
+        description,
+        kind: kindLabel,
+        style: styleLabel,
+        gender: genderLabel,
+        count,
+      });
+
+      const result = await aiGenerateStructured({
+        system: spec.system,
+        prompt: spec.prompt,
+        count: spec.count,
+        intent: "naming",
+        outputFormat: spec.outputFormat,
+      });
+
+      if (!result.ok) {
+        // AI 失败 → 降级本地引擎 + 明确提示（FR-04）
+        fallbackToLocal(result.message);
+        message.warning(result.message);
+        return;
+      }
+
+      // 模型返回的名字：过滤已用名 + 同批去重，保留寓意
+      const excludeSet = new Set(exclude.map((n) => n.trim()));
+      const seen = new Set<string>();
+      const aiResults: NamingResult[] = [];
+      for (const entry of result.data.entries) {
+        const name = (entry.name ?? "").trim();
+        if (!name || excludeSet.has(name) || seen.has(name)) continue;
+        seen.add(name);
+        aiResults.push({
+          name,
+          kind: effectiveKind,
+          style,
+          gender: effectiveGender,
+          source: "ai" as NamingSource,
+          ...(entry.meaning?.trim() ? { meaning: entry.meaning.trim() } : {}),
+        });
+        if (aiResults.length >= count) break;
+      }
+
+      // 一个可用名字都没有：视为本次生成无效，切回本地（不静默留空列表）
+      if (aiResults.length === 0) {
+        fallbackToLocal("AI 这次没有产出可用名字，已切回本地起名");
+        return;
+      }
+
+      // 数量不足：用本地引擎补齐（FR-02 客户端过滤补齐）
+      if (aiResults.length < count) {
+        const local = generateNames({
+          kind: effectiveKind,
+          style,
+          gender: effectiveGender,
+          count: count - aiResults.length,
+          exclude: [...exclude, ...Array.from(seen)],
+          seed: Date.now() >>> 0,
+        });
+        setResults([...aiResults, ...local]);
+      } else {
+        setResults(aiResults);
+      }
+
+      // JSON 不成立但兜底解析出了结果：如实告知，便于作者判断质量
+      if (result.data.usedFallback) {
+        setFallbackNote("模型未按约定格式返回，已按文本解析（寓意可能缺失）");
+      }
+    } catch (error) {
+      // IPC / 主进程侧异常（如 ai.db 未就绪）会 reject：不接住就是按钮永久 loading
+      const text = error instanceof Error ? error.message : String(error);
+      fallbackToLocal(text || "AI 调用失败");
+      message.warning(text || "AI 调用失败，已切回本地起名");
+    } finally {
+      // 无论成功、失败还是抛错都要复位，否则「AI 生成」按钮再也点不动
+      setAiLoading(false);
+    }
+  }, [
+    description,
+    effectiveKind,
+    effectiveGender,
+    style,
+    count,
+    exclude,
+    book,
+    fallbackToLocal,
+    message,
+  ]);
+
+  // 复制到剪贴板（兜底出口：不依赖 EditorPane ref）
+  const handleCopy = useCallback(async (name: string) => {
+    try {
+      await navigator.clipboard.writeText(name);
+    } catch {
+      // 旧浏览器或非安全上下文：静默失败，用户仍可手动复制
+    }
+  }, []);
+
+  // 选项变化：按变更后的值立即重生一批（走参数，不读闭包）
+  const handleKindChange = (next: NamingKind) => {
+    setKind(next);
+    buildBatch({
+      kind: next,
+      style,
+      gender: next === "person" ? gender : "any",
+      count,
+    });
+  };
+  const handleStyleChange = (next: NameStyle) => {
+    setStyle(next);
+    // 新风格不支持当前类型时回退到该风格首个支持的类型（与 effectiveKind 口径一致）
+    const nextKind = isKindSupported(next, kind) ? kind : firstSupportedKind(next);
+    buildBatch({
+      kind: nextKind,
+      style: next,
+      gender: nextKind === "person" ? gender : "any",
+      count,
+    });
+  };
+  const handleGenderChange = (next: NameGender) => {
+    setGender(next);
+    buildBatch({
+      kind: effectiveKind,
+      style,
+      gender: effectiveKind === "person" ? next : "any",
+      count,
+    });
+  };
+  const handleCountChange = (next: number) => {
+    setCount(next);
+    buildBatch({
+      kind: effectiveKind,
+      style,
+      gender: effectiveGender,
+      count: next,
+    });
+  };
+
+  // 首次进入自动生成一批
+  const handleFocus = useCallback(() => {
+    if (results.length === 0) {
+      buildBatch({
+        kind: effectiveKind,
+        style,
+        gender: effectiveGender,
+        count,
+      });
+    }
+  }, [results.length, buildBatch, effectiveKind, style, effectiveGender, count]);
+
+  // 收藏夹：判断是否已收藏（去重展示按钮态）
+  const favoriteNameSet = useMemo(
+    () => new Set(favorites.map((f) => f.name)),
+    [favorites],
+  );
+
+  // 下拉选项：全部走组件库 Select（AGENTS 6.1.2 组件库优先）
+  const kindOptions = useMemo(
+    () =>
+      NAMING_KINDS.map((k) => ({
+        value: k.id,
+        label: k.label,
+        disabled: !isKindSupported(style, k.id),
+      })),
+    [style],
+  );
+
+  const styleOptions = useMemo(
+    () =>
+      NAMING_STYLES.map((s) => ({
+        value: s.id,
+        label: `${s.label}（${s.family === "eastern" ? "东方" : "西方"}）`,
+      })),
+    [],
+  );
+
+  const countOptions = useMemo(
+    () => COUNT_OPTIONS.map((n) => ({ value: n, label: `${n} 个` })),
+    [],
+  );
+
+  return (
+    <div className="nv-name" onFocus={handleFocus}>
+      <div className="nv-name__options">
+        <div className="nv-name__opt">
+          <span>类型</span>
+          <Select
+            className="nv-name__select"
+            size="small"
+            classNames={{ popup: { root: "nv-name__dropdown" } }}
+            aria-label="名称类型"
+            value={effectiveKind}
+            options={kindOptions}
+            onChange={handleKindChange}
+          />
+        </div>
+
+        <div className="nv-name__opt">
+          <span>风格</span>
+          <Select
+            className="nv-name__select"
+            size="small"
+            classNames={{ popup: { root: "nv-name__dropdown" } }}
+            aria-label="名称风格"
+            value={style}
+            options={styleOptions}
+            onChange={handleStyleChange}
+          />
+        </div>
+
+        <div className="nv-name__opt">
+          <span>性别</span>
+          <Select
+            className="nv-name__select"
+            size="small"
+            classNames={{ popup: { root: "nv-name__dropdown" } }}
+            aria-label="性别"
+            value={effectiveGender}
+            disabled={effectiveKind !== "person"}
+            options={GENDER_OPTIONS}
+            onChange={handleGenderChange}
+          />
+        </div>
+
+        <div className="nv-name__opt">
+          <span>数量</span>
+          <Select
+            className="nv-name__select"
+            size="small"
+            classNames={{ popup: { root: "nv-name__dropdown" } }}
+            aria-label="生成数量"
+            value={count}
+            options={countOptions}
+            onChange={handleCountChange}
+          />
+        </div>
+      </div>
+
+      <div className="nv-name__ai">
+        {/* REQ-063：描述输入框只服务于 AI 起名（本地引擎不读它），
+            AI 不该出现时一并收掉 —— 否则留一个「填了也不生效」的输入框 */}
+        {aiVisible ? (
+          <Input.TextArea
+            className="nv-name__ai-input"
+            value={description}
+            placeholder="可选：补充你的想法（不填也能按本书设定起名）"
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        ) : null}
+        <div className="nv-name__ai-actions">
+          {/* AI 起名：总开关关掉时整颗不渲染；开着但没配全时禁用 + 说明 */}
+          {aiVisible ? (
+            <Button
+              className="nv-name__ai-btn"
+              onClick={() => void handleAiGenerate()}
+              loading={aiLoading}
+              disabled={aiLoading || !aiAvailable}
+              title={aiAvailable ? undefined : aiUnavailableText}
+            >
+              <SvgIcon svg={aiSvg} />
+              AI 起名
+            </Button>
+          ) : null}
+          {/* 本地起名入口：不随 AI 出现与否变化（起名有本地兜底，AI 只是增强） */}
+          <Button className="nv-name__regen" onClick={handleNextBatch} title="换一批（避开本书已用名）">
+            <ReloadOutlined />换一批（本地）
+          </Button>
+        </div>
+      </div>
+
+      {aiVisible && fallbackNote ? (
+        <div className="nv-name__fallback">
+          <span>{fallbackNote}</span>
+          {/* R-AI-02 FR-04：降级提示必须「可恢复」——只告诉作者「AI 没成」而不给
+              去配置的入口，等于让他自己去找设置在哪 */}
+          {actions.onOpenAiSettings ? (
+            <Button
+              className="nv-name__fallback-link"
+              onClick={() => actions.onOpenAiSettings?.()}
+            >
+              去设置
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="nv-sechead">
+        结果<em>{results.length}</em>
+      </div>
+
+      {results.length === 0 ? (
+        <div className="nv-empty">
+          <b>还没有生成</b>
+          <span>
+            {isKindSupported(style, effectiveKind)
+              ? "点「换一批」试试"
+              : `当前风格不支持${
+                  NAMING_KINDS.find((k) => k.id === effectiveKind)?.label ?? "该类型"
+                }`}
+          </span>
+        </div>
+      ) : (
+        <div className="nv-name__grid">
+          {results.map((r, index) => {
+            const favorited = favoriteNameSet.has(r.name);
+            return (
+              <div
+                key={r.name}
+                className="nv-name__card"
+                style={{ animationDelay: `${index * 18}ms` }}
+              >
+                <span className="nv-name__text">
+                  {r.name}
+                  {r.source === "ai" ? (
+                    <em className="nv-name__badge" title="AI 生成">
+                      AI
+                    </em>
+                  ) : null}
+                </span>
+                {r.meaning ? (
+                  <span className="nv-name__meaning" title={r.meaning}>
+                    {r.meaning}
+                  </span>
+                ) : null}
+                <span className="nv-name__acts">
+                  <Button
+                    className="nv-mini"
+                    aria-label="插入正文"
+                    title="插入到正文光标处"
+                    onClick={() => actions.onInsertToEditor(r.name)}
+                  >
+                    <ThunderboltOutlined />
+                  </Button>
+                  {/* 寓意只有 AI 起名才产（本地引擎没有）→ 有才出按钮，不做灰态占位 */}
+                  {r.meaning ? (
+                    <Button
+                      className="nv-mini"
+                      aria-label="插入寓意"
+                      title="把「名字：寓意」插入到正文光标处"
+                      onClick={() => actions.onInsertMeaning(r.name, r.meaning as string)}
+                    >
+                      <SnippetsOutlined />
+                    </Button>
+                  ) : null}
+                  <Button
+                    className="nv-mini"
+                    aria-label="建为角色卡"
+                    title="建为角色卡（名称带入）"
+                    onClick={() => actions.onCreateCharacter(r.name)}
+                  >
+                    <PlusOutlined />
+                  </Button>
+                  <Button
+                    className={`nv-mini${favorited ? " is-on" : ""}`}
+                    aria-label={favorited ? "已收藏" : "加入收藏"}
+                    title={favorited ? "已收藏" : "加入收藏"}
+                    aria-pressed={favorited}
+                    disabled={favorited}
+                    onClick={() => actions.onAddFavorite(r.name, r.kind, r.style, r.source)}
+                  >
+                    {favorited ? <StarFilled /> : <StarOutlined />}
+                  </Button>
+                  <Button
+                    className="nv-mini"
+                    aria-label="复制"
+                    title="复制到剪贴板"
+                    onClick={() => void handleCopy(r.name)}
+                  >
+                    <CopyOutlined />
+                  </Button>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="nv-sechead">
+        收藏夹<em>{favorites.length}</em>
+      </div>
+
+      {favorites.length === 0 ? (
+        <div className="nv-empty">
+          <b>还没有收藏的名字</b>
+          <span>在结果卡上点星标即可收藏（收藏会保存在这本书里）</span>
+        </div>
+      ) : (
+        <ul className="nv-name__favorites">
+          {favorites.map((f) => (
+            <li key={f.id} className="nv-name__fav">
+              <span className="nv-name__fav-name" title={f.name}>
+                {f.name}
+                {f.source === "ai" ? (
+                  <em className="nv-name__badge" title="AI 生成">
+                    AI
+                  </em>
+                ) : null}
+              </span>
+              <span className="nv-name__fav-meta">
+                {NAMING_DICTIONARY.styles.find((s) => s.id === f.style)?.label} ·{" "}
+                {NAMING_DICTIONARY.kinds.find((k) => k.id === f.kind)?.label}
+              </span>
+              <span className="nv-name__fav-acts">
+                <Button
+                  className="nv-mini"
+                  aria-label="插入正文"
+                  title="插入到正文光标处"
+                  onClick={() => actions.onInsertToEditor(f.name)}
+                >
+                  <ThunderboltOutlined />
+                </Button>
+                <Button
+                  className="nv-mini"
+                  aria-label="建为角色卡"
+                  title="建为角色卡"
+                  onClick={() => actions.onCreateCharacter(f.name)}
+                >
+                  <PlusOutlined />
+                </Button>
+                <Button
+                  className="nv-mini is-on"
+                  aria-label="移除收藏"
+                  title="移除收藏"
+                  onClick={() => actions.onRemoveFavorite(f.id)}
+                >
+                  <StarFilled />
+                </Button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

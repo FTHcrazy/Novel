@@ -1,0 +1,142 @@
+/* 卡文救援浮层（R-AI-11）：Drawer 承载浮层与焦点陷阱，
+   内部三段式排布 = 处境摘要 / 风格与列表（可滚动）/ 底部落点与动作。 */
+.nv-rescue {
+  /* 浮层底色跟随主题内容面（与 GlobalInspirationDrawer 同一口径）。
+     ⚠️ 只改变量：`.ant-drawer-section` 的底色是 antd 运行时注入的
+     `background: var(--ant-color-bg-elevated)`，自写同特异性属性规则会被压掉。 */
+  --ant-color-bg-elevated: var(--app-surface);
+
+  /* 浮层卡片化：四角圆角，上下（及右缘）从窗口边缘让出 12px。
+     antd v6 的 Drawer 默认四角直角、贴满窗口边缘，右缘上下两角顶死在
+     窗口角上。`.ant-drawer-right > .ant-drawer-content-wrapper` 是 (0,2,0)
+     的运行时注入样式，同特异性会被压掉 —— 用 `.nv-rescue.ant-drawer-right`
+     提高一级特异性。 */
+  &.ant-drawer-right > .ant-drawer-content-wrapper {
+    /* 顶部再让出整条标题栏（34px 拖动带）：Drawer portal 到 body、根节点
+       inset: 0，12px 的卡片留白盖不住 WindowHeader，窗口控制按钮会被面板
+       压在底下。高度一律读 `--app-window-header-height`（见 WindowHeader/index.scss）。 */
+    top: calc(var(--app-window-header-height, 34px) + 12px);
+    bottom: 12px;
+    right: 12px;
+  }
+
+  .ant-drawer-section {
+    border-radius: 14px;
+  }
+
+  .ant-drawer-body {
+    padding: 12px 16px 16px;
+  }
+
+  /* 提示条走主题警示色：antd 的 colorWarning 派生是出厂的浅黄，
+     贴在暖色主题上像另一套色卡；这里换成 --app-warning-weak 底 + 主题警示字。 */
+  .ant-alert.ant-alert-warning {
+    background: var(--app-warning-weak);
+    border-color: color-mix(in srgb, var(--app-warning) 38%, var(--app-border));
+    color: var(--app-text);
+  }
+
+  /* 救援卡片同样要亮一档，底退到内容面后才有边界感（勾选态仍是 primary-weak） */
+  .nv-rescue-card {
+    background: var(--app-surface-elevated);
+
+    &.is-checked {
+      background: var(--app-primary-weak);
+    }
+  }
+}
+
+.nv-rescue__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+}
+
+.nv-rescue__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.nv-rescue__badge {
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--app-surface-alt);
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.nv-rescue__chars {
+  color: var(--app-text-secondary);
+}
+
+.nv-rescue__node {
+  flex: 1 1 100%;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+}
+
+.nv-rescue__consent {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface-alt);
+}
+
+.nv-rescue__consent-text {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.nv-rescue__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.nv-rescue__pending {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.nv-rescue__pending-text {
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.nv-rescue__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--app-border);
+}
+
+.nv-rescue__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.nv-rescue__count {
+  color: var(--app-text-muted);
+  font-size: 12px;
+}

@@ -1,0 +1,144 @@
+@use "../../styles/pack-widget" as widget;
+
+/* 备注与规则备忘（台账底部折叠区内容）：全部 --app-* 令牌
+   设计口径：便签卡片 —— 标题与正文直接写在卡面上，卡内不允许出现任何
+   输入框边框/底色/聚焦环（「盒中盒」是这组样式最忌讳的形态）；
+   「可编辑」由卡片 hover / :focus-within 边框提亮统一承接，
+   「可删除」由悬停才现身的幽灵 ✕ 承接。
+
+   ⚠️ antd 6 borderless 结构备忘（真机截图踩坑后确认）：
+   - 紫色聚焦框是 `:focus-visible` 时的紫色 **outline**
+     （input/style/variants.js → genBorderlessFocusVisibleStyle），
+     不是 box-shadow —— 只压 shadow 压不掉它；
+   - 无 affix 时 className 与 `ant-input-borderless` 类都落在
+     input / textarea 元素本身，单层选择器即可命中。 */
+
+.lq-notes {
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lq-notes__empty {
+  font-size: 12px;
+  color: var(--app-text-muted);
+  margin: 0;
+}
+
+/* 单条备忘卡：底色比台面沉一档；悬停 / 聚焦时边框提亮一档 */
+.lq-notes__field {
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-item);
+  background: var(--app-surface-alt);
+  padding: 6px 10px;
+  transition: border-color var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover,
+  &:focus-within {
+    border-color: var(--app-border-strong);
+  }
+}
+
+/* 标题行：删除钮悬停才现身 */
+.lq-notes__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── 输入层压平：无边框 / 无底色 / 无聚焦环，全部交互态一起压 ── */
+.lq-notes__field .lq-notes__name.ant-input,
+.lq-notes__field .lq-notes__value.ant-input {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+
+  &:hover,
+  &:focus,
+  &:focus-visible,
+  &:focus-within {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    outline: none;
+  }
+}
+
+/* 标题：14px 加粗标题感，与 12px 正文拉开层级 */
+.lq-notes__field .lq-notes__name.ant-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--app-text);
+
+  &::placeholder {
+    font-weight: 400;
+    color: var(--app-text-muted);
+  }
+}
+
+/* 删除钮：幽灵图标——悬停卡片才现身；无底无框，悬停变危险色 */
+.lq-notes .lq-notes__del.ant-btn {
+  @include widget.cpk-widget;
+
+  flex: none;
+  width: 20px;
+  height: 20px;
+  justify-content: center;
+  padding: 0;
+  font-size: 12px;
+  color: var(--app-text-muted);
+  opacity: 0;
+  transition:
+    opacity var(--app-t-fast) var(--app-ease-standard),
+    color var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    color: var(--app-error);
+  }
+
+  &:focus-visible {
+    opacity: 1;
+    outline: 1px solid var(--app-border-strong);
+  }
+}
+
+.lq-notes__field:hover .lq-notes__del.ant-btn,
+.lq-notes__field:focus-within .lq-notes__del.ant-btn {
+  opacity: 1;
+}
+
+/* 正文：直接流淌在卡面上；行高放宽提升长文可读性。
+   高度策略：field-sizing: content（Chromium 123+，Electron 44 ✓）由浏览器
+   原生自适应，取代 antd autoSize 的「测量→回写」两帧循环（伸缩闪烁根因）；
+   max-height 承担原 maxRows 8 的截断，超出后内部滚动。 */
+.lq-notes__field .lq-notes__value.ant-input {
+  /* ⚠️ 必须锁回容器宽：field-sizing: content 会让宽度也随内容撑开，
+     整行超出后被窗口裁切（真机截图：行尾文字被切一半不换行）；
+     宽度定死 100% 后文本正常折行，field-sizing 只承担高度自适应 */
+  width: 100%;
+  field-sizing: content;
+  height: auto;
+  min-height: 1.6em;
+  max-height: calc(8 * 1.6em);
+  overflow-y: auto;
+  resize: none;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--app-text-secondary);
+  padding: 2px 0 0;
+  margin-top: 2px;
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+}
+
+.lq-notes__add.ant-btn {
+  height: 32px;
+  font-size: 12px;
+}

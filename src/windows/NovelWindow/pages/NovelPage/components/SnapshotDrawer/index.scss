@@ -1,0 +1,163 @@
+/* 抽屉里的按钮一律是 antd `Button`（AGENTS 6.1.2）：先清零再声明组件级变量，
+ * 状态样式只写变量（antd 的 :hover / :active 规则特异性更高，自写属性压不过）。
+ */
+@use "../../../../../../shared/styles/widget" as widget;
+
+.nv-snap {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  background: var(--app-surface-elevated);
+  border-left: 1px solid var(--app-border);
+  box-shadow: var(--app-shadow-pop);
+  transform: translateX(100%);
+  /* 收起态彻底不上屏（同 .nv-setting）：`translateX(100%)` 只推到定位容器右缘外，
+     容器比窗口窄时抽屉会停在支撑面板上方、看起来一直开着。 */
+  visibility: hidden;
+  transition:
+    transform var(--app-t-slow) var(--app-ease-standard),
+    visibility 0s linear var(--app-t-slow);
+  /* 收起态不参与命中测试：aside 常驻 DOM、只靠位移移出，若宿主容器恰好没裁切
+     （或用户把窗拖得极窄），滑出边缘那一条仍会挡在正文上，表现是「点正文没反应」 */
+  pointer-events: none;
+
+  &.is-open {
+    transform: none;
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      transform var(--app-t-slow) var(--app-ease-standard),
+      visibility 0s linear 0s;
+  }
+
+  &__head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 11px 13px;
+    border-bottom: 1px solid var(--app-border);
+
+    b {
+      font-size: 12px;
+      color: var(--app-text-strong);
+    }
+
+    // 关闭按钮：无业务类，用组件库根类命中，hover 的底色 / 字色写成变量
+    .ant-btn {
+      @include widget.ant-button-reset;
+      --ant-control-height: 22px;
+      --ant-button-padding-inline: 0px;
+      --ant-button-content-font-size: 12px;
+      --ant-border-radius: 4px;
+      --ant-button-default-color: var(--app-text-muted);
+      --ant-button-default-hover-bg: var(--app-surface-hover);
+      --ant-button-default-hover-color: var(--app-text);
+      --ant-button-default-active-bg: var(--app-surface-hover);
+      --ant-button-default-active-color: var(--app-text);
+      --ant-button-default-shadow: none;
+
+      margin-left: auto;
+      display: grid;
+      place-items: center;
+      width: 22px;
+    }
+  }
+
+  &__sub {
+    font-size: 12px;
+    color: var(--app-text-secondary-strong);
+  }
+
+  &__body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 10px;
+  }
+
+  &__empty {
+    padding: 24px 8px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--app-text-muted);
+  }
+
+  &__item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: var(--app-radius-chip);
+    transition: background var(--app-t-fast) var(--app-ease-standard);
+
+    &:hover {
+      background: var(--app-surface-hover);
+    }
+  }
+
+  &__time {
+    width: 42px;
+    flex: none;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--app-text-strong);
+  }
+
+  &__delta {
+    font-size: 12px;
+    color: var(--app-text-secondary-strong);
+  }
+
+  &__actions {
+    margin-left: auto;
+    display: flex;
+    gap: 5px;
+
+    // 「回滚」：无业务类，用组件库根类命中，hover 底色走变量
+    .ant-btn {
+      @include widget.ant-button-reset;
+      --ant-control-height: auto;
+      --ant-button-padding-inline: 6px;
+      --ant-button-content-font-size: 12px;
+      --ant-border-radius: 3px;
+      --ant-line-width: 1px;
+      --ant-button-default-border-color: var(--app-primary);
+      --ant-button-default-color: var(--app-primary);
+      --ant-button-default-hover-bg: var(--app-primary-weak);
+      --ant-button-default-hover-color: var(--app-primary);
+      --ant-button-default-hover-border-color: var(--app-primary);
+      --ant-button-default-active-bg: var(--app-primary-weak);
+      --ant-button-default-active-color: var(--app-primary);
+      --ant-button-default-active-border-color: var(--app-primary);
+      --ant-button-default-shadow: none;
+
+      padding-block: 1px;
+      justify-content: center;
+    }
+  }
+
+  &__preview {
+    flex-basis: 100%;
+    margin: 4px 0 0;
+    font-size: 12px;
+    line-height: 1.6;
+    /* 快照正文预览是抽屉里的主要阅读内容，muted 对比度不够 */
+    color: var(--app-text-secondary-strong);
+    word-break: break-all;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nv-snap {
+    transition-duration: 0ms;
+    /* 无动画时不必再等滑出，立刻隐藏 */
+    transition-delay: 0ms;
+  }
+}

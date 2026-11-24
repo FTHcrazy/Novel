@@ -1,0 +1,181 @@
+// 右栏的「记一条灵感」图标按钮与筛选 chips 都由 antd `Button` 承载（AGENTS §6.1.2）：
+// 先清零组件级变量再声明自己的外观；hover / 选中态一律写成变量 ——
+// 自写 `:hover` 属性规则压不过 `.ant-btn:not(:disabled):not(.ant-btn-disabled):hover`（0,4,0）
+@use "../../../../shared/styles/widget" as widget;
+
+.bs-rail {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 320px;
+  padding: 16px 16px 16px 14px;
+  border-left: 1px solid var(--app-splitter);
+  /* 滚动交给灵感列表自己（1.41.0 虚拟化）：外层再留 overflow 会形成双滚动，
+     虚拟列表量不到可视高度 —— 与 SupportPanel 的 flatScroll 同一条教训 */
+  overflow: hidden;
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--app-text);
+  }
+
+  &__total {
+    padding: 1px 8px;
+    border-radius: var(--app-radius-pill);
+    background: var(--app-primary-weak);
+    color: var(--app-primary);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  &__subtitle {
+    margin: -4px 0 0;
+    font-size: 12px;
+    color: var(--app-text-muted);
+  }
+
+  /* ── 捕捉框 ── */
+  &__capture {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-chip);
+  }
+
+  &__input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    resize: none;
+    outline: none;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--app-text);
+
+    // antd TextArea（AGENTS 6.1.2）：复合选择器压过组件库默认内边距与字号
+    &.ant-input {
+      padding: 2px 4px;
+      font-size: 12px;
+    }
+
+    &::placeholder {
+      color: var(--app-text-disabled);
+    }
+
+    // antd v6 borderless 聚焦自带 focus-visible outline，与捕捉框容器观感
+    // 不符，统一关闭
+    &:focus,
+    &:focus-visible {
+      outline: none;
+    }
+  }
+
+  &__capture-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  &__owner {
+    max-width: 200px;
+    font-size: 12px;
+  }
+
+  /* ── 筛选 chips ── */
+  &__chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  &__chip.ant-btn {
+    @include widget.ant-button-reset;
+    --ant-control-height: auto;
+    --ant-button-padding-inline: 10px;
+    --ant-button-content-font-size: 12px;
+    --ant-button-icon-gap: 5px;
+    --ant-border-radius: var(--app-radius-pill);
+    --ant-line-width: 1px;
+    --ant-button-default-bg: var(--app-surface);
+    --ant-button-default-color: var(--app-text-secondary);
+    --ant-button-default-border-color: transparent;
+    --ant-button-default-hover-bg: var(--app-surface);
+    --ant-button-default-hover-color: var(--app-text-secondary);
+    --ant-button-default-hover-border-color: transparent;
+    --ant-button-default-active-bg: var(--app-surface);
+    --ant-button-default-active-color: var(--app-text-secondary);
+    --ant-button-default-active-border-color: transparent;
+    --ant-button-default-shadow: none;
+
+    /* antd 不接管的属性 */
+    display: inline-flex;
+    align-items: center;
+    padding-block: 3px;
+
+    /* 悬浮投影：antd 只有恒定的 --ant-button-default-shadow，没有 hover 阴影变量。
+       这里只在 :hover 上改**变量**（不写 box-shadow 属性），既保住「悬浮才投影」，
+       也不用跟 antd 的 box-shadow 声明比特异性 */
+    &:hover {
+      --ant-button-default-shadow: var(--app-shadow-card);
+    }
+
+    /* 选中态：主色实底 + 反白字。hover / active 必须同步写成主色，
+       否则会被 antd 的 (0,4,0) hover 规则拉回默认底色 */
+    &.is-active {
+      --ant-button-default-bg: var(--app-primary);
+      --ant-button-default-color: var(--app-primary-contrast);
+      --ant-button-default-border-color: var(--app-primary);
+      --ant-button-default-hover-bg: var(--app-primary-strong);
+      --ant-button-default-hover-color: var(--app-primary-contrast);
+      --ant-button-default-hover-border-color: var(--app-primary-strong);
+      --ant-button-default-active-bg: var(--app-primary-active);
+      --ant-button-default-active-color: var(--app-primary-contrast);
+      --ant-button-default-active-border-color: var(--app-primary-active);
+      --ant-button-font-weight: 600;
+    }
+  }
+
+  &__chip-count {
+    font-size: 12px;
+    opacity: 0.75;
+  }
+
+  /* ── 灵感列表（滚动容器；2.55.0 起按条数分流：少则原生滚动，多才虚拟化）── */
+  &__list {
+    flex: 1;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    /* 虚拟列表会在滚动中修正总高，浏览器又把滚动位置「锚定」在可视内容上：
+       两者各拉一次，滚到最底部时就成了上下抖动。锚定交给 Virtuoso 自己管。 */
+    overflow-anchor: none;
+  }
+
+  /* 虚拟列表没有 flex gap 可用：卡片间距收在每格的 padding 上 */
+  &__cell {
+    padding-bottom: 8px;
+  }
+
+  &__empty {
+    padding: 28px 12px;
+    border: 1px dashed var(--app-border);
+    border-radius: var(--app-radius-chip);
+    text-align: center;
+    font-size: 12px;
+    color: var(--app-text-disabled);
+  }
+}
