@@ -1,0 +1,71 @@
+.ol-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--app-bg);
+}
+
+.ol-spin {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  // antd v6 的 Spin 有 children 时 DOM 是 .ant-spin > .ant-spin-container，
+  // 已没有 v5 的 .ant-spin-nested-loading 那一层（旧选择器全部落空，是
+  // 三栏塌成内容高的根因）。两层都转 flex 列，.ol-body 的 flex:1 才生效。
+  > .ant-spin {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+
+    > .ant-spin-container {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+  }
+}
+
+.ol-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  // 独立堆叠上下文：画布（.ol-axis）内是绝对定位层，个别带 z-index 的层
+  // （strip 头 z-4 等）在裁剪异常时会被绘制到同层普通流面板之上——
+  // 托盘/右栏固定 z-index 兜底，任何情况下面板都在画布之上。
+  isolation: isolate;
+}
+
+.ol-tray,
+.ol-panel {
+  position: relative;
+  z-index: 1;
+}
+
+.ol-page__armtip {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  padding: 4px 14px;
+  border-radius: 8px;
+  background: var(--app-primary-weak);
+  border: 1px solid var(--app-border);
+  color: var(--app-primary);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.ol-page__clickcatch {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}

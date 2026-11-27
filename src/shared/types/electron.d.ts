@@ -832,8 +832,105 @@ export interface NovelBackupRestoreResult {
   safetyCopy: string
 }
 
-/** 回收站条目类型（2026-11 起含要素：O-13b） */
-export type NovelTrashKind = "work" | "volume" | "chapter" | "entity"
+/** 回收站条目类型（2026-11 起含要素：O-13b；大纲草稿：outline-plan-spec v7.1） */
+export type NovelTrashKind = "work" | "volume" | "chapter" | "entity" | "outline"
+
+// ── 大纲工作台 DTO（与 electron/handlers/novel/outline-handlers.ts 保持一致） ──
+
+export interface OutlineProjectDTO {
+  id: string
+  /** 空串 = UI 显示「未命名大纲」 */
+  name: string
+  /** null = 草稿态（大纲先行）；非空 = 已绑定作品（一作品一份大纲） */
+  workId: string | null
+  updatedAt: number
+}
+
+export interface OutlineLaneDTO {
+  id: string
+  name: string
+  note: string
+  sort: number
+}
+
+export interface OutlineEventDTO {
+  id: string
+  /** null = 待归类（托盘） */
+  laneId: string | null
+  /** 时间槽号（≥0）：槽号即时间序，同槽 = 同刻堆叠 */
+  slot: number
+  /** 同槽内次序；顺序真相 = (slot 升序, sort 升序) */
+  sort: number
+  breakBefore: boolean
+  title: string
+  body: string
+  whenText: string
+  starred: boolean
+}
+
+export interface OutlineEntityDTO {
+  id: string
+  type: "char" | "force" | "item" | "place" | "clue"
+  name: string
+  /** 逗号分隔别名（搜索用） */
+  aliases: string
+  body: string
+  colorSlot: string
+}
+
+export interface OutlineCastDTO {
+  eventId: string
+  entityId: string
+  /** 本场身份（≤20 字） */
+  roleLabel: string
+  sort: number
+  /** null = 收在事件卡内的 chip；有值 = 浮卡画布坐标 */
+  cardX: number | null
+  cardY: number | null
+}
+
+export interface OutlineZoneDTO {
+  id: string
+  laneId: string
+  name: string
+  note: string
+  colorSlot: string
+  shape: "brace" | "box" | "pill"
+  solid: boolean
+  filled: boolean
+  fromSlot: number
+  toSlot: number
+  sort: number
+}
+
+export interface OutlineEraDTO {
+  id: string
+  name: string
+  note: string
+  colorSlot: string
+  fromSlot: number
+  toSlot: number
+  sort: number
+}
+
+/** 工作台整包装载（一次 IPC 拉齐七表 + 已拍章计数） */
+export interface OutlineBundleDTO {
+  project: OutlineProjectDTO
+  lanes: OutlineLaneDTO[]
+  events: OutlineEventDTO[]
+  entities: OutlineEntityDTO[]
+  casts: OutlineCastDTO[]
+  zones: OutlineZoneDTO[]
+  eras: OutlineEraDTO[]
+  /** 已拍章计数：eventId → 引用章数（「已拍 N 章」角标） */
+  chapterRefs: Record<string, number>
+}
+
+/** 大纲项目列表（草稿按最近编辑倒序；works 渲染层只取前 5 部展示） */
+export interface OutlineProjectListResult {
+  drafts: OutlineProjectDTO[]
+  works: OutlineProjectDTO[]
+}
 
 /** 回收站条目 */
 export interface NovelTrashItemDTO {
@@ -1281,6 +1378,39 @@ export interface ElectronAPI {
       list: () => Promise<NovelFontEntry[]>
       delete: (fileName: string) => Promise<boolean>
     }
+  }
+
+  // ── 大纲工作台（outline-plan-spec v7.1，数据存 novel.db 的七张 outline 表）──
+  outline: {
+    projectList: () => Promise<OutlineProjectListResult>
+    projectCreate: (id: string, name: string) => Promise<OutlineProjectDTO | null>
+    projectRename: (id: string, name: string) => Promise<boolean>
+    /** 草稿软删除（进回收站，30 天可恢复；恢复走 restoreTrash('outline', id)） */
+    projectTrash: (id: string) => Promise<boolean>
+    /** 彻底删除（六表 + 项目行单事务物理清空，不可恢复） */
+    projectPurge: (id: string) => Promise<boolean>
+    /** 主进程返回纯 JSON 字符串（跨 IPC 三道克隆的公共子集），渲染层负责 parse */
+    load: (projectId: string) => Promise<string | null>
+    laneSave: (lane: { id: string; projectId?: string; name?: string; note?: string; sort?: number }) => Promise<boolean>
+    laneDelete: (laneId: string) => Promise<boolean>
+    eventSave: (event: { id: string; projectId?: string; laneId?: string | null; slot?: number; sort?: number; breakBefore?: boolean; title?: string; body?: string; whenText?: string; starred?: boolean }) => Promise<boolean>
+    eventDelete: (eventId: string) => Promise<boolean>
+    entitySave: (entity: { id: string; projectId?: string; type?: string; name?: string; aliases?: string; body?: string; colorSlot?: string }) => Promise<boolean>
+    entityDelete: (entityId: string) => Promise<boolean>
+    castSet: (patch: { eventId: string; entityId: string; roleLabel?: string; sort?: number; cardX?: number | null; cardY?: number | null }) => Promise<boolean>
+    castRemove: (eventId: string, entityId: string) => Promise<boolean>
+    /** 改挂：目标事件已有同实体 chip 时返回 false */
+    castMove: (eventId: string, entityId: string, toEventId: string) => Promise<boolean>
+    zoneSave: (zone: { id: string; projectId?: string; laneId: string; name?: string; note?: string; colorSlot?: string; shape?: string; solid?: boolean; filled?: boolean; fromSlot: number; toSlot: number; sort?: number }) => Promise<boolean>
+    zoneDelete: (zoneId: string) => Promise<boolean>
+    eraSave: (era: { id: string; projectId?: string; name?: string; note?: string; colorSlot?: string; fromSlot: number; toSlot: number; sort?: number }) => Promise<boolean>
+    eraDelete: (eraId: string) => Promise<boolean>
+    /** 「由此大纲创建作品」：单事务建书 + 绑定；失败（UNIQUE 冲突）返回 null */
+    bindWork: (projectId: string, name: string, genre: string | null) => Promise<string | null>
+    /** 章节拍入 / 取消拍入（eventId null = 取消） */
+    chapterLink: (chapterId: string, eventId: string | null) => Promise<boolean>
+    /** 批量整存（撤销栈回放 / 数据迁移专用）：单事务整体替换六表内容 */
+    bulkSave: (projectId: string, payload: unknown) => Promise<boolean>
   }
 
   send: (channel: string, data: unknown) => void

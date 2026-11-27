@@ -42,6 +42,20 @@ function reportIpc(payload: {
   }
 }
 
+/**
+ * 显式「不上报」的 invoke：目前只有 `log-write` 用得上。
+ *
+ * `log-write` 本身是日志出口，再套 `trackedInvoke` 会变成
+ * 「写日志失败 → 上报失败 → 再写日志」的自我放大；`log-*` 里除它之外
+ * 一律走 `trackedInvoke`，不要指望这条通道帮忙排查。
+ */
+function untrackedInvoke(
+  channel: string,
+  ...args: unknown[]
+): Promise<unknown> {
+  return ipcRenderer.invoke(channel, ...args) as Promise<unknown>
+}
+
 /** 所有 `ipcRenderer.invoke` 的统一入口：返回值原样透传，异常原样抛出 */
 function trackedInvoke(
   channel: string,
@@ -67,6 +81,52 @@ function trackedInvoke(
     },
   )
 }
+
+/**
+ * 单向通道白名单（`send` / `receive` 共用）。
+ *
+ * 放模块级而不是写在函数体里：这两个函数会被窗口控制按钮、`log-ipc`
+ * 这类高频动作反复调用，原来的 `const validChannels = [...]` 每次调用都
+ * 重新分配一个 13/4 元素数组，纯垃圾；`Set.has` 也比 `Array.includes` 快一档。
+ *
+ * ⚠️ 必须是**静态**清单：通道名一旦改成运行时拼接，白名单就失去了
+ * 「谁能调这个通道」的静态可审计性，guard 测试也会一起失效。
+ */
+const SEND_CHANNELS = new Set([
+  'login-confirm',
+  // 设置窗口开关（novel 版主窗标题栏的设置入口）
+  'settings-window-open',
+  // 地图窗口开关（架空地图入口）
+  'map-window-open',
+  // 地图关窗 flush 回执：渲染层写完存档后通知主进程可以真正关闭窗口
+  // （主进程侧 close 拦截见 main.ts 的 registerMapFlushGuard）
+  'map-doc-flush-done',
+  // 行囊独立窗口开关（小说窗口顶栏入口，full/novel 版）
+  'pack-window-open',
+  // 跨窗口导航：行囊窗口请求打开小说窗口的设定中心（UI-03）
+  'novel-open-setting-center',
+  // 全局设定中心独立窗口开关（书架入口，full/novel 版）
+  'global-setting-window-open',
+  // 人物关系网络独立窗口开关（右栏工具箱入口，full/novel 版，R27）
+  'relation-window-open',
+  // 退出登录（SettingsWindow 账号区发起，主进程编排回登录窗）
+  'auth-logout',
+  // WindowHeader 窗口控制（最小化/最大化/关闭）与最大化状态查询
+  'window-control',
+  'window-maximize-query',
+  // 本地日志：IPC 失败 / 慢调用的观测上报（fire-and-forget）
+  'log-ipc',
+])
+
+const RECEIVE_CHANNELS = new Set([
+  'window-maximize-state',
+  // 行囊窗口「真的可见」的回执：顶栏那颗按钮据此从「正在打开」恢复
+  'pack-window-shown',
+  // 全局设定中心窗口「真的可见」的回执：书架那颗按钮据此退出「正在打开」
+  'global-setting-window-shown',
+  // 地图关窗前的取快照请求：渲染层收到后立刻 flush，再回 map-doc-flush-done
+  'map-doc-request-snapshot',
+])
 
 // 通过 contextBridge 暴露安全的 API 给渲染进程
 /**
@@ -442,6 +502,73 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // ── 大纲工作台（outline-plan-spec v7.1，数据存 novel.db 的七张 outline 表）──
+  outline: {
+    /** 项目列表（草稿 / 作品大纲两组，不含回收站条目） */
+    projectList: () => trackedInvoke('novel-outline-project-list'),
+    /** 新建草稿（id 渲染层生成；name 空串 = UI 显示「未命名大纲」） */
+    projectCreate: (id: string, name: string) =>
+      trackedInvoke('novel-outline-project-create', id, name) as Promise<unknown>,
+    projectRename: (id: string, name: string) =>
+      trackedInvoke('novel-outline-project-rename', id, name) as Promise<boolean>,
+    /** 草稿软删除（进回收站，30 天可恢复；恢复走 novel.restoreTrash('outline', id)） */
+    projectTrash: (id: string) =>
+      trackedInvoke('novel-outline-project-trash', id) as Promise<boolean>,
+    /** 彻底删除（六表 + 项目行单事务物理清空，不可恢复） */
+    projectPurge: (id: string) =>
+      trackedInvoke('novel-outline-purge', id) as Promise<boolean>,
+    /**
+     * 工作台整包装载（七表 + 已拍章计数，一次 IPC 拉齐）。
+     * 主进程刻意返回 JSON 字符串而非对象：Electron 的三道结构化克隆
+     * （handler 返回 / invoke 响应 / contextBridge）对对象的白名单并不一致。
+     * 渲染层用 parseOutlineLoadPayload 解码，这里只做类型标注。
+     */
+    load: (projectId: string) =>
+      trackedInvoke('novel-outline-load', projectId) as Promise<string | null>,
+    /** 泳道保存（新建时入参须带 projectId） */
+    laneSave: (lane: { id: string; projectId?: string; name?: string; note?: string; sort?: number }) =>
+      trackedInvoke('novel-outline-lane-save', lane) as Promise<boolean>,
+    /** 删泳道：线内事件转待归类 + 浮卡收回 + 线上区域随删（单事务） */
+    laneDelete: (laneId: string) =>
+      trackedInvoke('novel-outline-lane-delete', laneId) as Promise<boolean>,
+    /** 事件保存（新建时入参须带 projectId；laneId null = 待归类） */
+    eventSave: (event: { id: string; projectId?: string; laneId?: string | null; slot?: number; sort?: number; breakBefore?: boolean; title?: string; body?: string; whenText?: string; starred?: boolean }) =>
+      trackedInvoke('novel-outline-event-save', event) as Promise<boolean>,
+    /** 删事件：级联删出场 + 清章节拍入引用（单事务） */
+    eventDelete: (eventId: string) =>
+      trackedInvoke('novel-outline-event-delete', eventId) as Promise<boolean>,
+    entitySave: (entity: { id: string; projectId?: string; type?: string; name?: string; aliases?: string; body?: string; colorSlot?: string }) =>
+      trackedInvoke('novel-outline-entity-save', entity) as Promise<boolean>,
+    /** 删实体：其全部出场跨事件一起消失（单事务） */
+    entityDelete: (entityId: string) =>
+      trackedInvoke('novel-outline-entity-delete', entityId) as Promise<boolean>,
+    /** 出场幂等 upsert（cardX/cardY 有值 = 浮卡落位） */
+    castSet: (patch: { eventId: string; entityId: string; roleLabel?: string; sort?: number; cardX?: number | null; cardY?: number | null }) =>
+      trackedInvoke('novel-outline-cast-set', patch) as Promise<boolean>,
+    castRemove: (eventId: string, entityId: string) =>
+      trackedInvoke('novel-outline-cast-remove', eventId, entityId) as Promise<boolean>,
+    /** 改挂：目标事件已有同实体 chip 时返回 false（UI 提示重复并复位） */
+    castMove: (eventId: string, entityId: string, toEventId: string) =>
+      trackedInvoke('novel-outline-cast-move', eventId, entityId, toEventId) as Promise<boolean>,
+    zoneSave: (zone: { id: string; projectId?: string; laneId: string; name?: string; note?: string; colorSlot?: string; shape?: string; solid?: boolean; filled?: boolean; fromSlot: number; toSlot: number; sort?: number }) =>
+      trackedInvoke('novel-outline-zone-save', zone) as Promise<boolean>,
+    zoneDelete: (zoneId: string) =>
+      trackedInvoke('novel-outline-zone-delete', zoneId) as Promise<boolean>,
+    eraSave: (era: { id: string; projectId?: string; name?: string; note?: string; colorSlot?: string; fromSlot: number; toSlot: number; sort?: number }) =>
+      trackedInvoke('novel-outline-era-save', era) as Promise<boolean>,
+    eraDelete: (eraId: string) =>
+      trackedInvoke('novel-outline-era-delete', eraId) as Promise<boolean>,
+    /** 「由此大纲创建作品」：单事务建书 + 绑定；返回新作品 id，失败（UNIQUE 冲突）返回 null */
+    bindWork: (projectId: string, name: string, genre: string | null) =>
+      trackedInvoke('novel-outline-bind-work', projectId, name, genre) as Promise<string | null>,
+    /** 章节拍入 / 取消拍入（eventId null = 取消） */
+    chapterLink: (chapterId: string, eventId: string | null) =>
+      trackedInvoke('novel-outline-chapter-link', chapterId, eventId) as Promise<boolean>,
+    /** 批量整存（撤销栈回放 / 数据迁移专用）：单事务整体替换六表内容 */
+    bulkSave: (projectId: string, payload: unknown) =>
+      trackedInvoke('novel-outline-bulk-save', projectId, payload) as Promise<boolean>,
+  },
+
   // ── AI 助手（语义化 IPC，数据存独立 ai.db，全版本注册） ──
   // 对 §8.7「主进程不代理 HTTP」契约的刻意豁免（凭据安全 + 端点无法枚举），
   // 理由见 AGENTS.md §2.2.2.1 的 AI 铁律（Key 不下放渲染层）。
@@ -527,47 +654,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   send: (channel: string, data: unknown) => {
-    const validChannels = [
-      'login-confirm',
-      // 设置窗口开关（novel 版主窗标题栏的设置入口）
-      'settings-window-open',
-      // 地图窗口开关（架空地图入口）
-      'map-window-open',
-      // 地图关窗 flush 回执：渲染层写完存档后通知主进程可以真正关闭窗口
-      // （主进程侧 close 拦截见 main.ts 的 registerMapFlushGuard）
-      'map-doc-flush-done',
-      // 行囊独立窗口开关（小说窗口顶栏入口，full/novel 版）
-      'pack-window-open',
-      // 跨窗口导航：行囊窗口请求打开小说窗口的设定中心（UI-03）
-      'novel-open-setting-center',
-      // 全局设定中心独立窗口开关（书架入口，full/novel 版）
-      'global-setting-window-open',
-      // 人物关系网络独立窗口开关（右栏工具箱入口，full/novel 版，R27）
-      'relation-window-open',
-      // 退出登录（SettingsWindow 账号区发起，主进程编排回登录窗）
-      'auth-logout',
-      // WindowHeader 窗口控制（最小化/最大化/关闭）与最大化状态查询
-      'window-control',
-      'window-maximize-query',
-      // 本地日志：IPC 失败 / 慢调用的观测上报（fire-and-forget）
-      'log-ipc',
-    ]
-    if (validChannels.includes(channel)) {
+    if (SEND_CHANNELS.has(channel)) {
       ipcRenderer.send(channel, data)
     }
   },
   // 返回取消订阅函数，组件卸载时可移除监听，避免重复注册
   receive: (channel: string, func: (...args: unknown[]) => void) => {
-    const validChannels = [
-      'window-maximize-state',
-      // 行囊窗口「真的可见」的回执：顶栏那颗按钮据此从「正在打开」恢复
-      'pack-window-shown',
-      // 全局设定中心窗口「真的可见」的回执：书架那颗按钮据此退出「正在打开」
-      'global-setting-window-shown',
-      // 地图关窗前的取快照请求：渲染层收到后立刻 flush，再回 map-doc-flush-done
-      'map-doc-request-snapshot',
-    ]
-    if (validChannels.includes(channel)) {
+    if (RECEIVE_CHANNELS.has(channel)) {
       const listener = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => func(...args)
       ipcRenderer.on(channel, listener)
       return () => {
@@ -680,14 +773,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 目录形如 {userData}/user-data/{email-hash}/logs/{窗口名}/YYYY-MM-DD.log，
   // 未登录写 logs/_anonymous/。窗口名由主进程反查，渲染层不必自报。
   log: {
+    /** 日志出口自身不参与观测，见 `untrackedInvoke` */
     write: (entry: {
       level: 'debug' | 'info' | 'warn' | 'error'
       module: string
       message: string
       meta?: unknown
-    }) => ipcRenderer.invoke('log-write', entry) as Promise<boolean>,
+    }) => untrackedInvoke('log-write', entry) as Promise<boolean>,
     getConfig: () =>
-      ipcRenderer.invoke('log-config-get') as Promise<{
+      trackedInvoke('log-config-get') as Promise<{
         level: 'debug' | 'info' | 'warn' | 'error'
         ipc: boolean
         retentionDays: number
@@ -697,15 +791,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipc?: boolean
       retentionDays?: number
     }) =>
-      ipcRenderer.invoke('log-config-set', patch) as Promise<{
+      trackedInvoke('log-config-set', patch) as Promise<{
         level: 'debug' | 'info' | 'warn' | 'error'
         ipc: boolean
         retentionDays: number
       }>,
     openDir: (windowName?: string) =>
-      ipcRenderer.invoke('log-open-dir', windowName) as Promise<boolean>,
+      trackedInvoke('log-open-dir', windowName) as Promise<boolean>,
     switchUser: (reason: string) =>
-      ipcRenderer.invoke('log-switch-user', reason) as Promise<string>,
+      trackedInvoke('log-switch-user', reason) as Promise<string>,
   },
 
   // ── 快捷键（1.47.0：统一在设置窗口管理，应用级键由主进程注册） ──

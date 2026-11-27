@@ -120,6 +120,11 @@
   /* ── 描边 ── */
   --app-border: #e2e6f4;
   --app-border-strong: #d3d9ee;
+  /* ── 大纲画布：卡片描边 / 推进链与浮卡引线 ──
+     通用描边在四套主题下都太接近底色，卡片和连线糊成一片；这里单独给一档
+     更高对比的色，只用于大纲画布，不影响其它界面的描边层级。 */
+  --app-outline-card-border: #bcc5e3;
+  --app-outline-link: #929dbf;
 
   /* ── 文本 ── */
   --app-text: #2b2f4a;
@@ -210,6 +215,8 @@
   /* ── 描边 ── */
   --app-border: #efe5d6;
   --app-border-strong: #e3d6c2;
+  --app-outline-card-border: #d0bc9d;
+  --app-outline-link: #ab9573;
 
   /* ── 文本 ── */
   --app-text: #3d3629;
@@ -296,6 +303,8 @@
   /* ── 描边 ── */
   --app-border: #dfeee5;
   --app-border-strong: #cbe3d6;
+  --app-outline-card-border: #abd0bd;
+  --app-outline-link: #84b39a;
 
   /* ── 文本 ── */
   --app-text: #24352d;
@@ -385,6 +394,8 @@
   /* ── 描边 ── */
   --app-border: #2c313e;
   --app-border-strong: #3a4152;
+  --app-outline-card-border: #4d5770;
+  --app-outline-link: #7d88a3;
 
   /* ── 文本 ── */
   --app-text: #e8eaf2;

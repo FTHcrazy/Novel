@@ -1,0 +1,75 @@
+/** 待归类托盘（v9 原型 .tray 同源还原） */
+.ol-tray {
+  width: 200px;
+  flex: 0 0 auto;
+  background: var(--app-surface);
+  border-right: 1px dashed var(--app-border-strong);
+  display: flex;
+  flex-direction: column;
+  padding: 12px 10px;
+  overflow: auto;
+  min-height: 0;
+
+  &.is-hint {
+    background: var(--app-primary-weak);
+    outline: 2px dashed var(--app-primary);
+    outline-offset: -2px;
+  }
+}
+
+.ol-tray__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--app-text-secondary);
+  letter-spacing: 0.2px;
+}
+
+.ol-tray__cnt {
+  height: 18px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-surface-alt);
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ol-tray__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ol-tray__item {
+  width: 100%;
+
+  .ol-ev {
+    border-style: dashed;
+    background: var(--app-surface);
+
+    .ol-ev__idx {
+      background: var(--app-surface-alt);
+      color: var(--app-text-muted);
+    }
+  }
+}
+
+.ol-tray__empty {
+  font-size: 12px;
+  color: var(--app-text-disabled);
+  line-height: 1.8;
+  text-align: center;
+  border: 1px dashed var(--app-border);
+  border-radius: 10px;
+  padding: 18px 8px;
+}

@@ -3,6 +3,7 @@ import {
   ClusterOutlined,
   ImportOutlined,
   LoadingOutlined,
+  PartitionOutlined,
   PlusOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
@@ -28,6 +29,8 @@ interface ShelfTopBarProps {
    * 恰是窗口落到后面时的退路），只换内容、把点击留着。
    */
   globalSettingOpening?: boolean;
+  /** 打开大纲工作台（outline-plan-spec v7.1 §7.1 书架顶栏入口，P0） */
+  onOpenOutline: () => void;
 }
 
 /**
@@ -58,6 +61,7 @@ export default function ShelfTopBar({
   importPhase,
   onGlobalSettingClick,
   globalSettingOpening = false,
+  onOpenOutline,
 }: ShelfTopBarProps) {
   return (
     <div className="bs-topbar">
@@ -99,6 +103,22 @@ export default function ShelfTopBar({
               data-tour-target="shelf-global-setting"
             >
               {globalSettingOpening ? "正在打开…" : "全局设定中心"}
+            </Button>
+          </Tooltip>
+          {/* 大纲工作台入口（§7.1 顶栏入口 P0）：大纲先行的第二块工作面，
+              从书架直达；工作台内部自带项目切换器，这里只管「进得去」。 */}
+          <Tooltip title="事件时间轴工作台：先排大纲，再开写">
+            <Button
+              className="bs-topbar__outline"
+              icon={<PartitionOutlined />}
+              // 必须包一层：直接挂 onClick 会把 MouseEvent 当第一个实参传进
+              // store 的 openOutline(workId)，渲染层随后拿事件对象去反查大纲，
+              // 反查必然落空 —— 每次进工作台都弹「没有找到这个目标的大纲」。
+              onClick={() => onOpenOutline()}
+              aria-label="大纲工作台"
+              data-tour-target="shelf-outline"
+            >
+              大纲工作台
             </Button>
           </Tooltip>
           {/* 导入书籍（TXT / DOCX）：升为带文字按钮（O-10）。

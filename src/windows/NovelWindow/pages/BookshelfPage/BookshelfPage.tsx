@@ -56,6 +56,8 @@ interface BookshelfPageProps {
    * 销毁」需要横向空间，弹窗里只能靠省略号过日子。备份 / 恢复仍留在弹窗。
    */
   onOpenTrash: () => void;
+  /** 打开大纲工作台（书架顶栏入口，outline-plan-spec v7.1 §7.1） */
+  onOpenOutline: () => void;
   /**
    * 编辑器空书架空态的「导入书籍」请求（幂等 token）：收到后在本页发起选文件
    * 导入。导入的实现（选文件 → worker 解析 → 落库）只在这里有一份，
@@ -77,6 +79,7 @@ export default function BookshelfPage({
   visible = true,
   onOpenWork,
   onOpenTrash,
+  onOpenOutline,
   importRequest = null,
   onImportRequestConsumed,
 }: BookshelfPageProps) {
@@ -452,6 +455,7 @@ export default function BookshelfPage({
         importPhase={importPhase}
         onGlobalSettingClick={openGlobalSetting}
         globalSettingOpening={globalSettingOpening}
+        onOpenOutline={onOpenOutline}
       />
 
       <div className="bs-page__body">

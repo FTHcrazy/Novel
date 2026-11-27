@@ -472,6 +472,12 @@ describe("色块阶梯：页面根铺 bg、浮层底只给浮层用", () => {
     "src/windows/RelationWindow/components/RelationCanvas/index.scss", // 画布工具条 / 缩放按钮
     "src/windows/RelationWindow/components/RelationCreateDialog/index.scss", // 新建关系确认弹层
     "src/windows/RelationWindow/components/EdgeDetailCard/index.scss", // 边详情卡
+    // 大纲画布：卡 / 浮卡 / 区域标签 / 时代菜单 / 断口都浮在画布之上，
+    // 右栏摘要卡与列表卡浮在页面之上 —— 与页面底同色会丢掉层级
+    "src/windows/NovelWindow/pages/OutlinePage/components/EventCard/index.scss",
+    "src/windows/NovelWindow/pages/OutlinePage/components/OutlineAxis/index.scss",
+    "src/windows/NovelWindow/pages/OutlinePage/components/OutlineList/index.scss",
+    "src/windows/NovelWindow/pages/OutlinePage/components/OutlinePanel/index.scss",
   ]);
 
   it("窗口 / 页面根一律铺 --app-bg（铺 surface 会把页面底抬高一档）", () => {

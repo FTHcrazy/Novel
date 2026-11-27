@@ -39,6 +39,14 @@ const NOVEL_TABLES = [
   "novel_snapshots",
   "novel_notes",
   "novel_outline_entries",
+  // 大纲工作台（outline-plan-spec v7.1）：七表全部住在 novel.db
+  "novel_outline_projects",
+  "novel_outline_lanes",
+  "novel_outline_events",
+  "novel_outline_entities",
+  "novel_outline_casts",
+  "novel_outline_zones",
+  "novel_outline_eras",
   "novel_entities",
   "novel_links",
   // 小说设定（1.36.0：统一取代上面的三张等级表）

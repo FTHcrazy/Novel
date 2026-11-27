@@ -14,6 +14,7 @@ import { matchKeyEvent, useShortcutBindings } from "@/shared/shortcuts";
 // 根级样式由 main.tsx 引入（两者都引会重复插入同一份 CSS）
 import BookshelfPage from "./pages/BookshelfPage/BookshelfPage";
 import NovelPage from "./pages/NovelPage/NovelPage";
+import OutlinePage from "./pages/OutlinePage/OutlinePage";
 import RecycleBinPage from "./pages/RecycleBinPage/RecycleBinPage";
 import { selectHelpBadgeVisible, useGuideStore } from "./store/useGuideStore";
 import { useEntityJumpStore } from "./store/useEntityJumpStore";
@@ -86,6 +87,9 @@ export default function NovelWindowApp() {
   const importRequest = useEntityJumpStore((s) => s.importRequest);
   const openWork = useEntityJumpStore((s) => s.openWork);
   const consumeOpenRequest = useEntityJumpStore((s) => s.consumeOpenRequest);
+  const outlineRequest = useEntityJumpStore((s) => s.outlineRequest);
+  const consumeOutlineRequest = useEntityJumpStore((s) => s.consumeOutlineRequest);
+  const openOutline = useEntityJumpStore((s) => s.openOutline);
   const backToShelf = useEntityJumpStore((s) => s.backToShelf);
   const goToView = useEntityJumpStore((s) => s.goToView);
   const requestImport = useEntityJumpStore((s) => s.requestImport);
@@ -194,6 +198,20 @@ export default function NovelWindowApp() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [openHelp, helpKeys]);
 
+  // 大纲工作台快捷键（§14）：书架 / 编辑器 / 大纲内都能按 —— 编辑器里不与
+  // 正文键位冲突（Mod+Shift 组合不参与输入），大纲里等于「回到工作台头部」。
+  const outlineKeys = bindings.openOutline ?? "Mod+Shift+O";
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing) return;
+      if (!matchKeyEvent(event, outlineKeys)) return;
+      event.preventDefault();
+      openOutline();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [openOutline, outlineKeys]);
+
   /**
    * 引导启动收口在这一层：只有它同时知道「当前是哪个视图」。
    * 第 1 步属书架页、第 2-5 步属编辑器页，两个 Tour 实例各自只渲染属于自己的那一步，
@@ -236,6 +254,8 @@ export default function NovelWindowApp() {
               <span className="novel-badge">
                 {shelfScreen === "trash" ? "回收站" : "书架"}
               </span>
+            ) : view === "outline" ? (
+              <span className="novel-badge">大纲</span>
             ) : null
           }
           actions={
@@ -257,6 +277,7 @@ export default function NovelWindowApp() {
                 visible={view === "shelf" && shelfScreen === "main"}
                 onOpenWork={openWork}
                 onOpenTrash={openTrash}
+                onOpenOutline={() => openOutline()}
                 importRequest={importRequest}
                 onImportRequestConsumed={consumeImportRequest}
               />
@@ -267,6 +288,19 @@ export default function NovelWindowApp() {
             {view === "shelf" && shelfScreen === "trash" && (
               <div className="novel-view">
                 <RecycleBinPage onBack={backToShelf} />
+              </div>
+            )}
+            {/* 大纲工作台（第 3 视图）：进出即挂载 / 卸载 —— 数据都在
+                useOutlineStore（组件外），卸载不丢状态；重进按 openRequest
+                幂等装载。卸载顺带摘掉画布的键盘监听，回到书架不会误触 N。 */}
+            {view === "outline" && (
+              <div className="novel-view">
+                <OutlinePage
+                  openRequest={outlineRequest}
+                  onOpenRequestConsumed={consumeOutlineRequest}
+                  visible
+                  onBackToShelf={backToShelf}
+                />
               </div>
             )}
             {editorMounted && (

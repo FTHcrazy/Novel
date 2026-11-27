@@ -100,7 +100,14 @@ describe("countTrashKinds", () => {
       item({ kind: "chapter", id: "c1" }),
       item({ kind: "entity", id: "e1", workName: "山海拾遗" }),
     ]);
-    expect(counts).toEqual({ all: 5, work: 2, volume: 1, chapter: 1, entity: 1 });
+    expect(counts).toEqual({
+      all: 5,
+      work: 2,
+      volume: 1,
+      chapter: 1,
+      entity: 1,
+      outline: 0,
+    });
   });
 
   it("空列表全为 0（分段标签要显示「全部 0」而不是空白）", () => {
@@ -110,6 +117,7 @@ describe("countTrashKinds", () => {
       volume: 0,
       chapter: 0,
       entity: 0,
+      outline: 0,
     });
   });
 });
@@ -222,6 +230,7 @@ describe("类型标签", () => {
       volume: "卷",
       chapter: "章节",
       entity: "要素",
+      outline: "大纲草稿",
     });
   });
 });

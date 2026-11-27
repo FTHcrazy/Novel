@@ -1,6 +1,7 @@
 import { App } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { NovelTrashItemDTO } from "@/shared/types/electron";
+import { outlinePurge } from "../../NovelPage/services/outline-service";
 import {
   listTrash,
   purgeChapter,
@@ -31,6 +32,11 @@ async function purgeByKind(item: NovelTrashItemDTO): Promise<void> {
   }
   if (item.kind === "entity") {
     await purgeEntity(item.id);
+    return;
+  }
+  // 大纲草稿（outline-plan-spec v7.1）：六表 + 项目行单事务物理清空
+  if (item.kind === "outline") {
+    await outlinePurge(item.id);
     return;
   }
   await removeWork(item.id);

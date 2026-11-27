@@ -22,6 +22,7 @@ const buildProps = (
   onImportClick: vi.fn(),
   importing: false,
   onGlobalSettingClick: vi.fn(),
+  onOpenOutline: vi.fn(),
   ...over,
 });
 
@@ -78,16 +79,30 @@ describe("书架顶栏 · 全局设定中心入口（T04）", () => {
 describe("书架顶栏 · 入口收敛到 3 个（O-10）", () => {
   afterEach(() => cleanup());
 
-  it("顶栏只有三颗动作（全局设定中心 / 导入书籍 / 新建作品）", () => {
+  it("顶栏动作：全局设定中心 / 大纲工作台 / 导入书籍（工具条）+ 新建作品（主按钮）", () => {
     const { container } = render(<ShelfTopBar {...buildProps()} />);
-    // 工具条里恰好两颗（搜索框的清除按钮由 antd 渲染在 Input 内部，不在此列）
+    // 工具条里恰好三颗（搜索框的清除按钮由 antd 渲染在 Input 内部，不在此列）；
+    // 大纲工作台是 outline-plan-spec §7.1 的 P0 顶栏入口，与首日动作并列同权
     const tools = container.querySelector(".bs-topbar__tools");
-    expect(tools!.querySelectorAll("button")).toHaveLength(2);
+    expect(tools!.querySelectorAll("button")).toHaveLength(3);
 
-    // 两个工具 + 主按钮，且都以文字示人（纯图标猜不出用途）
+    // 三个工具 + 主按钮，且都以文字示人（纯图标猜不出用途）
     expect(tools!.textContent).toContain("全局设定中心");
+    expect(tools!.textContent).toContain("大纲工作台");
     expect(tools!.textContent).toContain("导入书籍");
     expect(screen.getByText("新建作品")).toBeInTheDocument();
+  });
+
+  it("大纲工作台入口：一击触发回调并带引导锚点 shelf-outline", () => {
+    const onOpenOutline = vi.fn();
+    render(<ShelfTopBar {...buildProps({ onOpenOutline })} />);
+    const button = screen.getByRole("button", { name: "大纲工作台" });
+    expect(button).toHaveAttribute("data-tour-target", "shelf-outline");
+    fireEvent.click(button);
+    expect(onOpenOutline).toHaveBeenCalledTimes(1);
+    // 不得把 MouseEvent 当实参传出去：store 的 openOutline(workId) 会把事件
+    // 当成目标 id，装载时反查落空 → 每次进工作台都弹「没有找到目标大纲」
+    expect(onOpenOutline).toHaveBeenCalledWith();
   });
 
   it("数据安全与回收站不再出现在顶栏（已移到页脚）", () => {

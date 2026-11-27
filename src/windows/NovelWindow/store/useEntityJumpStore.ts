@@ -33,9 +33,23 @@ import {
 /** 书架区的二级页面：主页 / 回收站（编辑器不是二级页面，由 `view` 管） */
 export type ShelfScreen = "main" | "trash";
 
+/**
+ * 主窗口视图：书架 / 编辑器 / 大纲工作台。
+ * GuideView 只服务引导文案（Tour 只拍书架与编辑器），大纲是新增的第三视图，
+ * 不进引导步骤；需要区分三态的判定一律用本类型。
+ */
+export type NovelView = GuideView | "outline";
+
+/** 大纲工作台的打开请求（幂等 token，OutlinePage 消费） */
+export interface OpenOutlineRequest {
+  /** 有值 = 作品态直达（作品绑定的大纲）；无参 = 最近编辑草稿或新建 */
+  workId?: string;
+  token: number;
+}
+
 interface EntityJumpState {
-  /** 视图：书架主页 / 编辑器（整个 NovelWindow 的显隐开关都在这） */
-  view: GuideView;
+  /** 视图：书架主页 / 编辑器 / 大纲工作台（整个 NovelWindow 的显隐开关都在这） */
+  view: NovelView;
   /**
    * 书架区的二级页面：主页 / 回收站。
    *
@@ -49,6 +63,8 @@ interface EntityJumpState {
   editorMounted: boolean;
   /** 书架 → 编辑器的打开请求（幂等 token，NovelPage 消费） */
   openRequest: OpenWorkRequest | null;
+  /** 书架 / 编辑器 → 大纲工作台的打开请求（幂等 token，OutlinePage 消费） */
+  outlineRequest: OpenOutlineRequest | null;
   /** 编辑器空书架空态的「导入书籍」请求 */
   importRequest: number | null;
 
@@ -75,6 +91,9 @@ interface EntityJumpState {
 
   openWork: (workId: string, chapterId?: string, entityId?: string) => void;
   consumeOpenRequest: () => void;
+  /** 打开大纲工作台（无参 = 最近编辑草稿或新建；有参 = 作品态直达） */
+  openOutline: (workId?: string) => void;
+  consumeOutlineRequest: () => void;
   backToShelf: () => void;
   goToView: (target: GuideView) => void;
   /** 进书架区的回收站页面（书架数据管理面，不是弹窗） */
@@ -142,6 +161,7 @@ export const useEntityJumpStore = create<EntityJumpState>((set, get) => ({
   shelfScreen: "main",
   editorMounted: false,
   openRequest: null,
+  outlineRequest: null,
   importRequest: null,
   bridge: null,
   deferred: null,
@@ -210,6 +230,23 @@ export const useEntityJumpStore = create<EntityJumpState>((set, get) => ({
 
   consumeOpenRequest: () => set({ openRequest: null }),
 
+  openOutline: (workId) => {
+    // 只认真实 id：书架按钮曾把 onClick 的 MouseEvent 直接透传进来，workId
+    // 变成一个事件对象 —— 装载时按 id 反查必然落空，于是每次进工作台都弹
+    // 「没有找到这个目标的大纲」。非字符串一律按「无参 = 最近草稿」处理。
+    const target = typeof workId === "string" && workId.trim() ? workId : undefined;
+    // 进大纲工作台 = 新意图：跳转挂起与书架二级页面同步作废
+    set({
+      view: "outline",
+      outlineRequest: { workId: target, token: Date.now() },
+      shelfScreen: "main",
+      pending: null,
+      deferred: null,
+    });
+  },
+
+  consumeOutlineRequest: () => set({ outlineRequest: null }),
+
   backToShelf: () => {
     // 返回书架 = 明确放弃挂起 / 待确认的跳转。**同步**清（不等 effect）：
     // 否则残留消息在书架态被重判，就是真机复现过的「返回书架却切书」；
@@ -249,6 +286,7 @@ export function resetEntityJumpStore(): void {
     shelfScreen: "main",
     editorMounted: false,
     openRequest: null,
+    outlineRequest: null,
     importRequest: null,
     bridge: null,
     deferred: null,

@@ -1,0 +1,576 @@
+/**
+ * 右侧栏样式（v9 原型 .panel / .p-title / .p-meta / .sec-h / .row / .sum-card 同源还原）
+ *
+ * 行一律用原生 button（设计稿就是 <button class="row">）：antd Button 会塞一层
+ * 内层 span 并自带 padding/min-width，行内头像与右对齐数字都会漂。
+ */
+.ol-panel {
+  width: 320px;
+  flex: 0 0 auto;
+  background: var(--app-surface);
+  border-left: 1px solid var(--app-border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+
+  /* FR-18：右栏可收起，收起后只留一条窄边 */
+  &.is-collapsed {
+    width: 36px;
+    align-items: center;
+  }
+}
+
+.ol-panel__expand {
+  margin-top: 8px;
+}
+
+.ol-panel__fold {
+  flex: 0 0 24px !important;
+  padding: 0 !important;
+  color: var(--app-text-muted);
+}
+
+.ol-panel__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 10px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--app-border);
+
+  button {
+    flex: 1;
+    height: 28px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--app-text-secondary);
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    transition:
+      background var(--app-t-fast) var(--app-ease-standard),
+      color var(--app-t-fast) var(--app-ease-standard),
+      box-shadow var(--app-t-fast) var(--app-ease-standard);
+
+    &:hover {
+      background: var(--app-surface-hover);
+      color: var(--app-text);
+    }
+
+    &.is-on {
+      background: var(--app-surface-elevated);
+      color: var(--app-text-strong);
+      font-weight: 600;
+      box-shadow: var(--app-shadow-ambient);
+    }
+  }
+}
+
+.ol-panel__body {
+  flex: 1;
+  overflow: auto;
+  padding: 14px;
+  min-height: 0;
+}
+
+/* ── 事件详情 ── */
+/* 标题：无边框输入（视觉上是 .p-title，点进去才变成输入框） */
+.ol-panel__title-wrap {
+  margin-bottom: 8px;
+}
+
+.ol-panel__title.ant-input {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.1px;
+  color: var(--app-text-strong);
+  border-radius: 0;
+
+  &:focus,
+  &:hover {
+    box-shadow: none;
+    border: 0;
+    background: transparent;
+  }
+
+  &::placeholder {
+    font-weight: 600;
+    color: var(--app-text-muted);
+  }
+}
+
+/* 标签组（.p-meta）：泳道·格 / 时间 / 出场数 */
+.ol-panel__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.ol-tag {
+  font-size: 12px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  background: var(--app-surface-alt);
+  color: var(--app-text-secondary);
+  font-variant-numeric: tabular-nums;
+
+  &--pri {
+    background: var(--app-primary-weak);
+    color: var(--app-primary-strong);
+    font-weight: 500;
+  }
+
+  /* 行内小标（「画布上」） */
+  &.is-mini {
+    height: 18px;
+    padding: 0 5px;
+    margin-left: 6px;
+    font-size: 11px;
+    background: var(--app-surface-alt);
+    color: var(--app-text-muted);
+  }
+}
+
+/* 虚线链接按钮（设计稿 .link-btn）：包区域 / 添加 / 新建 */
+.ol-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px dashed var(--app-border-strong);
+  background: transparent;
+  font-size: 12px;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    border-color var(--app-t-fast) var(--app-ease-standard),
+    color var(--app-t-fast) var(--app-ease-standard),
+    background var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    border-color: var(--app-primary);
+    color: var(--app-primary);
+    background: var(--app-primary-weak);
+  }
+
+  &.is-zone {
+    margin-bottom: 10px;
+  }
+
+  &.is-arm {
+    border-style: solid;
+    border-color: var(--app-primary);
+    color: var(--app-primary-strong);
+    background: var(--app-primary-weak);
+    font-weight: 600;
+  }
+}
+
+/* 正文（.p-text） */
+.ol-panel__text.ant-input {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface-elevated);
+  padding: 10px 11px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--app-text);
+  transition:
+    border-color var(--app-t-fast) var(--app-ease-standard),
+    box-shadow var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    border-color: var(--app-border-strong);
+  }
+
+  &:focus {
+    border-color: var(--app-primary);
+    box-shadow: 0 0 0 2px var(--app-primary-weak);
+  }
+}
+
+.ol-panel__fieldrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+
+  /* CommitField 自带一层 div（用于聚焦正文），这里让它吃满剩余宽度 */
+  > div {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.ol-panel__fieldlabel {
+  flex: 0 0 auto;
+  width: 96px;
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+
+/* ── 分组标题（.sec-h） ── */
+.ol-sec {
+  margin-top: 18px;
+}
+
+/* 分组内的标题不再叠一层上边距（否则 .ol-sec 的 18 与标题的 16 相加） */
+.ol-sec > .ol-sec__head {
+  margin-top: 0;
+}
+
+.ol-sec__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 8px;
+
+  b {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--app-text-secondary-strong);
+    letter-spacing: 0.2px;
+  }
+}
+
+.ol-sec__n {
+  font-size: 12px;
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ol-sec__sp {
+  flex: 1;
+}
+
+/* ── 行（.row） ── */
+.ol-rowlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ol-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  width: 100%;
+  font-size: 13px;
+  color: var(--app-text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--app-t-fast) var(--app-ease-standard),
+    color var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    background: var(--app-surface-hover);
+    color: var(--app-text);
+  }
+
+  &.is-sel {
+    background: var(--app-primary-weak);
+    color: var(--app-primary-strong);
+    font-weight: 600;
+  }
+
+  &.is-unused {
+    opacity: 0.72;
+  }
+
+  &__t {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+  }
+
+  &__c {
+    flex: 0 0 auto;
+    font-size: 12px;
+    color: var(--app-text-muted);
+    font-variant-numeric: tabular-nums;
+    max-width: 132px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__go {
+    flex: 0 0 auto;
+    font-size: 12px;
+    color: var(--app-text-muted);
+    opacity: 0;
+    transition: opacity var(--app-t-fast) var(--app-ease-standard);
+  }
+
+  /* 移除出场：hover 才浮出（与卡片 chip 的 ✕ 同一语义），行高不变 */
+  &__rm {
+    flex: 0 0 auto;
+    display: none;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 11px;
+    color: var(--app-text-muted);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--app-error-weak);
+      color: var(--app-error);
+    }
+  }
+
+  &:hover &__rm {
+    display: grid;
+  }
+
+  &:hover &__go {
+    opacity: 1;
+  }
+}
+
+/* ── 空态（.empty） ── */
+.ol-empty {
+  padding: 14px 10px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--app-text-muted);
+
+  b {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--app-text-secondary);
+  }
+
+  &.is-lg {
+    margin-top: 32px;
+    padding: 22px 10px;
+  }
+}
+
+/* ── 底部动作 ── */
+.ol-panel__actions {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ol-danger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--app-error);
+  cursor: pointer;
+  transition:
+    background var(--app-t-fast) var(--app-ease-standard),
+    border-color var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    background: var(--app-error-weak);
+    border-color: color-mix(in srgb, var(--app-error) 32%, transparent);
+  }
+}
+
+/* ── 新建实体行 ── */
+.ol-panel__newrow {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ol-panel__typesel {
+  width: 82px;
+  flex: 0 0 auto;
+}
+
+/* ── 角色汇总卡（.sum-card） ── */
+/* 返回全部实体：设计稿里从列表进详情后总得有回头路，做成一条极轻的链接 */
+.ol-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--app-text);
+  }
+}
+
+.ol-sumcard {
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface-elevated);
+  padding: 12px;
+  margin-bottom: 4px;
+}
+
+.ol-sumcard__top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.ol-sumcard__namewrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.ol-sumcard__name-wrap {
+  min-width: 0;
+}
+
+.ol-sumcard__name.ant-input {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  height: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text-strong);
+  border-radius: 0;
+
+  &:focus,
+  &:hover {
+    box-shadow: none;
+    border: 0;
+    background: transparent;
+  }
+}
+
+.ol-sumcard__type {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+
+.ol-sumcard__desc-wrap {
+  margin-bottom: 10px;
+}
+
+.ol-sumcard__desc.ant-input {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--app-text-secondary);
+
+  &:focus,
+  &:hover {
+    box-shadow: none;
+    border: 0;
+    background: transparent;
+  }
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+}
+
+.ol-sumcard__alias {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 10px;
+  font-size: 12px;
+  color: var(--app-text-muted);
+
+  > div {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.ol-sumcard__stat {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--app-border);
+  font-size: 12px;
+  color: var(--app-text-muted);
+
+  b {
+    display: block;
+    margin-bottom: 1px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--app-text-strong);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.ol-panel__foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--app-border);
+  font-size: 12px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.ol-kbd {
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--app-surface-alt);
+  border: 1px solid var(--app-border);
+  color: var(--app-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: 6px;
+
+  &:first-child {
+    margin-left: 0;
+  }
+}

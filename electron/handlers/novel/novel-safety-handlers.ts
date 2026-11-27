@@ -68,11 +68,14 @@ function pickWindow(event: IpcMainInvokeEvent): BrowserWindow | null {
 
 /**
  * 回收站条目类型（渲染层据此决定展示与恢复提示）。
- * - work：整部作品（软删只标作品行，卷章仍在库里）
+ * - work：整部作品（软删只标作品行，卷章仍在库里；其大纲 project 同批打标）
  * - volume：整个卷（内含章节与卷同批打标，不单独成条）
  * - chapter：单章（含「删卷之前就单独删掉」的那部分）
+ * - entity：要素单条（O-13b）
+ * - outline：大纲草稿单条（outline-plan-spec v7.1：草稿删除进回收站；
+ *   已绑定作品的大纲由作品条目代表，不单独成条）
  */
-type NovelTrashKind = "work" | "volume" | "chapter";
+type NovelTrashKind = "work" | "volume" | "chapter" | "entity" | "outline";
 
 /** 回收站列表行（渲染层直接消费，字段已转驼峰） */
 interface NovelTrashItemDto {
@@ -398,12 +401,26 @@ export function registerNovelSafetyHandlers(): void {
   });
 
   // ── 删除兜底：作品移入回收站 ──
-  ipcMain.handle("novel-work-trash", (_event, id: string) =>
-    novelRun(
-      "UPDATE novel_works SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
-      [Date.now(), id],
-    ).changes > 0,
-  );
+  // 删作品 = 软删除（回收站）。其大纲 project 行**同批打标**（同一个时间戳，
+  // outline-plan-spec v7.1：作品条目代表整套大纲，恢复作品时同批恢复）。
+  ipcMain.handle("novel-work-trash", (_event, id: string) => {
+    const db = getNovelDb();
+    const apply = db.transaction((): boolean => {
+      const deletedAt = Date.now();
+      const changed =
+        novelRun(
+          "UPDATE novel_works SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+          [deletedAt, id],
+        ).changes > 0;
+      if (!changed) return false;
+      novelRun(
+        "UPDATE novel_outline_projects SET deleted_at = ? WHERE work_id = ? AND deleted_at IS NULL",
+        [deletedAt, id],
+      );
+      return true;
+    });
+    return apply();
+  });
 
   // ── 回收站列表（作品 / 卷 / 章三类合并，按删除时间倒序） ──
   ipcMain.handle("novel-trash-list", (): NovelTrashListResult => {
@@ -460,6 +477,22 @@ export function registerNovelSafetyHandlers(): void {
          JOIN novel_works w ON w.id = e.work_id
         WHERE e.deleted_at IS NOT NULL
           AND w.deleted_at IS NULL
+       UNION ALL
+       -- 大纲草稿（outline-plan-spec v7.1）：草稿单条进回收站。
+       -- 已绑定作品的大纲（work_id 非空）由作品条目代表，不单列 —— 即使
+       -- 那部作品也在回收站里（同批打标），避免同一套大纲出现两条。
+       -- work_id 指向的作品已不存在（曾被彻底删除）的悬挂草稿同样列出。
+       SELECT 'outline', p.id, CASE WHEN p.name = '' THEN '未命名大纲' ELSE p.name END, p.deleted_at,
+              '', '',
+              0,
+              (SELECT COUNT(*) FROM novel_outline_events ev WHERE ev.project_id = p.id),
+              0
+         FROM novel_outline_projects p
+        WHERE p.deleted_at IS NOT NULL
+          AND (p.work_id IS NULL OR NOT EXISTS (
+            SELECT 1 FROM novel_works pw
+             WHERE pw.id = p.work_id AND pw.deleted_at IS NOT NULL
+          ))
         ORDER BY deleted_at DESC`,
     ) as Array<{
       kind: string;
@@ -495,21 +528,42 @@ export function registerNovelSafetyHandlers(): void {
   /*
    * ── 从回收站恢复 ──
    *
-   * 三类共用一个通道，按 kind 分派（`novel-trash-restore(kind, id)`）。
-   * 作品只清标记；卷 / 章还要处理「原位是否被占」，见 pickRestoreSort。
-   * 任何一类都**不重建数据**：正文、快照、大纲条目全都还在库里。
+   * 各类共用一个通道，按 kind 分派（`novel-trash-restore(kind, id)`）。
+   * 作品只清标记（其大纲 project 同批恢复）；卷 / 章还要处理「原位是否被占」，
+   * 见 pickRestoreSort。任何一类都**不重建数据**：正文、快照、大纲六表全都
+   * 还在库里 —— 恢复只是清掉 deleted_at。
    */
   ipcMain.handle("novel-trash-restore", (_event, kind: string, id: string) => {
     if (kind === "work") {
+      // 作品恢复：同批打标的大纲 project 一并放出（deleted_at 相同 = 同批）
+      const db = getNovelDb();
+      const apply = db.transaction((): boolean => {
+        const work = novelGet(
+          "SELECT deleted_at FROM novel_works WHERE id = ? AND deleted_at IS NOT NULL",
+          [id],
+        ) as { deleted_at: number } | undefined;
+        if (!work) return false;
+        novelRun("UPDATE novel_works SET deleted_at = NULL WHERE id = ?", [id]);
+        novelRun(
+          "UPDATE novel_outline_projects SET deleted_at = NULL WHERE work_id = ? AND deleted_at = ?",
+          [id, work.deleted_at],
+        );
+        return true;
+      });
+      return apply();
+    }
+    if (kind === "volume") return restoreVolume(id);
+    if (kind === "chapter") return restoreChapter(id);
+    // 大纲草稿恢复（v7.1）：只清标记；恢复后 work_id 仍为 NULL（草稿不自动
+    // 绑回任何作品），六表数据原位未动、完整性对拍由渲染层装载自证。
+    if (kind === "outline") {
       return (
         novelRun(
-          "UPDATE novel_works SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL",
+          "UPDATE novel_outline_projects SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL",
           [id],
         ).changes > 0
       );
     }
-    if (kind === "volume") return restoreVolume(id);
-    if (kind === "chapter") return restoreChapter(id);
     return false;
   });
 }

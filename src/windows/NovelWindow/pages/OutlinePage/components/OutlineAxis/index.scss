@@ -1,0 +1,961 @@
+/**
+ * 时间轴画布样式（v9 原型 .axis/.lane/.tstrip/.v-era/.band/.free-layer 同源还原）
+ * 颜色只写 var(--app-*)；时间线带 = 主色明度阶 + 顶部高光 + 底部内阴影。
+ */
+.ol-axis {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 16px 20px 48px;
+  position: relative;
+  background: var(--app-bg);
+}
+
+.ol-hcanvas {
+  position: relative;
+  min-width: 100%;
+  // 画布铺满可视高度：inline 只给 minHeight（内容下限），这里吃满容器，
+  // 空槽区域的行格背景才能一直铺到窗口底（v9 行为）。
+  height: 100%;
+}
+
+.ol-vcols {
+  position: relative;
+  /* 参与 flex 布局吃满 rail 之外的空间（不能写 min-width:100%：
+     与 .ol-vwrap 的 gap 相加会撑出一条多余的横向滚动） */
+  flex: 1 0 auto;
+  min-width: 0;
+  // 高度不写死：由 .ol-vwrap（flex, align-items: stretch）拉齐 rail，
+  // inline 只给 minHeight 作为内容下限。
+}
+
+.ol-vwrap {
+  display: flex;
+  align-items: stretch;
+  /* 设计稿 .v-canvas gap:48px：时间段 rail 与第一条轨道之间留白，
+     否则纵向画布左边「两套表格」直接贴在一起读不出层次 */
+  gap: 48px;
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+/* ── 纵向列（设计稿 .v-col）：列头 36 + 区域标签留白 56 → 首槽 92 ── */
+.ol-vcol {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+
+  &__head {
+    position: relative;
+    height: 36px;
+  }
+
+  // 列头与首槽之间的标签留白：区域名称 pill 挂在 band 上缘外侧时落在这一带
+  &__sp {
+    height: 56px;
+  }
+}
+
+/* ── 时间线带（横向）：一条带箭头收尾的缎带 ── */
+.ol-strip__head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  font-size: 12px;
+  color: var(--app-text-muted);
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--app-primary) 18%, var(--app-surface-alt)) 0%,
+      color-mix(in srgb, var(--app-primary) 8%, var(--app-surface)) 100%
+    );
+  border-bottom: 1px solid var(--app-border-strong);
+  box-sizing: border-box;
+}
+
+.ol-strip {
+  position: absolute;
+  top: 0;
+  height: 44px;
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--app-primary) 18%, var(--app-surface-alt)) 0%,
+      color-mix(in srgb, var(--app-primary) 8%, var(--app-surface)) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--app-surface-elevated) 55%, transparent),
+    inset 0 -7px 10px -8px color-mix(in srgb, var(--app-text-strong) 20%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--app-primary) 26%, transparent);
+  border-bottom: 1px solid var(--app-border-strong);
+  clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 0 100%);
+}
+
+.ol-era {
+  position: absolute;
+  top: 0;
+  height: 44px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--app-t-fast) var(--app-ease-standard);
+
+  & + .ol-era::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    top: 6px;
+    bottom: 6px;
+    width: 0;
+    border-left: 2px dashed
+      color-mix(in srgb, var(--app-text-strong) 30%, var(--app-border-strong));
+    pointer-events: none;
+  }
+
+  &:hover {
+    background: var(--app-surface-hover);
+  }
+
+  /* 拖边预览（设计稿 .edge-drag）：虚线描边 + 淡主色底，松手才真正吸附落库 */
+  &.is-resizing {
+    z-index: 3;
+    background: color-mix(in srgb, var(--app-primary) 10%, transparent);
+    outline: 1px dashed var(--app-primary);
+    outline-offset: -1px;
+  }
+
+  b {
+    position: absolute;
+    left: 12px;
+    right: 22px;
+    top: 7px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--app-text-strong);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  i {
+    position: absolute;
+    left: 12px;
+    right: 22px;
+    top: 25px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    font-style: normal;
+    color: var(--app-text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &.is-ph b {
+    color: var(--app-text-muted);
+    font-weight: 500;
+  }
+
+  &__edge {
+    position: absolute;
+    top: 0;
+    height: 44px;
+    width: 9px;
+    cursor: ew-resize;
+    z-index: 2;
+
+    &.is-l {
+      left: -4px;
+    }
+
+    &.is-r {
+      right: -4px;
+    }
+  }
+}
+
+.ol-strip__hint {
+  position: absolute;
+  right: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: color-mix(in srgb, var(--app-primary) 70%, var(--app-text-muted));
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+/* ── 纵向共享 rail（横向标尺的 90° 镜像） ── */
+.ol-vrail {
+  position: relative;
+  width: 112px;
+  flex: 0 0 auto;
+  background:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--app-primary) 18%, var(--app-surface-alt)) 0%,
+      color-mix(in srgb, var(--app-primary) 8%, var(--app-surface)) 100%
+    );
+  box-shadow:
+    inset 1px 0 0 color-mix(in srgb, var(--app-surface-elevated) 55%, transparent),
+    inset -7px 0 10px -8px color-mix(in srgb, var(--app-text-strong) 20%, transparent),
+    inset -1px 0 0 color-mix(in srgb, var(--app-primary) 26%, transparent);
+  border-right: 1px solid var(--app-border-strong);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 20px), 50% 100%, 0 calc(100% - 20px));
+
+  &__head {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 2px;
+    height: 32px;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 10px;
+    font-size: 12px;
+    color: var(--app-text-secondary-strong);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  &__tail {
+    position: absolute;
+    left: 50%;
+    bottom: 4px;
+    transform: translateX(-50%);
+    font-size: 12px;
+    color: color-mix(in srgb, var(--app-primary) 70%, var(--app-text-muted));
+    pointer-events: none;
+  }
+}
+
+.ol-era.is-v {
+  left: 0;
+  width: 108px;
+  height: auto;
+
+  & + .ol-era.is-v::before {
+    left: 6px;
+    right: 6px;
+    top: -1px;
+    width: 0;
+    height: 0;
+    border-left: 0;
+    border-top: 2px dashed
+      color-mix(in srgb, var(--app-text-strong) 30%, var(--app-border-strong));
+  }
+
+  b {
+    left: 10px;
+    right: 20px;
+    top: 7px;
+    font-size: 12px;
+  }
+
+  i {
+    left: 10px;
+    right: 20px;
+    top: 26px;
+  }
+
+  &__x {
+    right: 4px;
+    top: 8px;
+  }
+
+  .ol-era__edge {
+    left: 0;
+    right: 0;
+    top: auto;
+    height: 7px;
+    width: auto;
+    cursor: ns-resize;
+
+    &.is-t {
+      top: -3px;
+    }
+
+    &.is-b {
+      top: auto;
+      bottom: -3px;
+    }
+  }
+}
+
+/* ── 泳道行（横向） ── */
+.ol-lanerow {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.ol-lanehead {
+  // 不用 sticky（在绝对定位父级里的粘性行为不可控，曾有行头整体不可见的
+  // 症状）：明确钉在行左侧，几何由父行决定。
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  z-index: 1;
+  width: 92px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 12px 0 0;
+  background: var(--app-bg);
+  box-sizing: border-box;
+
+  &__dot {
+    display: block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--lc, var(--app-primary));
+    flex: 0 0 auto;
+  }
+
+  b {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--app-text-secondary-strong);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: text;
+  }
+
+  &__cnt {
+    font-size: 12px;
+    color: var(--app-text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: context-menu;
+  }
+
+  &.is-dim {
+    opacity: 0.32;
+  }
+
+  &.is-compact {
+    left: 0;
+    right: 0;
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    height: 36px;
+    gap: 8px;
+    padding: 0 2px;
+
+    // 计数右对齐（设计稿 .v-head .cnt margin-left:auto）
+    .ol-lanehead__cnt {
+      margin-left: auto;
+    }
+
+    // 轨道色细线：颜色 = 泳道强调色（设计稿 .v-head::after 读 --lc）
+    &::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 2px;
+      border-radius: 1px;
+      background: var(--lc, var(--app-border-strong));
+      opacity: 0.4;
+    }
+  }
+}
+
+/* ── 卡片落位 ── */
+.ol-cellcard {
+  position: absolute;
+  width: 208px;
+  transition:
+    left var(--app-t-fast) var(--app-ease-emphasized),
+    top var(--app-t-fast) var(--app-ease-emphasized);
+
+  &.is-dragging {
+    opacity: 0.32;
+  }
+}
+
+/* 拖拽落格高亮：与命中判定同宽同轨，所见即所落 */
+.ol-cellhl {
+  position: absolute;
+  border-radius: 10px;
+  background: var(--app-primary-weak);
+  border: 1px dashed var(--app-primary);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 推进链箭头 */
+.ol-links {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 2;
+
+  /* 推进链：主色 2px + 6px 淡 glow 底线 + 实心三角箭头（设计稿 arrow 同款） */
+  &__glow {
+    fill: none;
+    stroke: var(--app-primary);
+    stroke-width: 6;
+    stroke-linecap: round;
+    opacity: 0.12;
+  }
+
+  &__path {
+    fill: none;
+    stroke: var(--app-primary);
+    stroke-width: 2;
+    stroke-linecap: round;
+    opacity: 0.85;
+  }
+
+  &__head {
+    fill: var(--app-primary);
+    opacity: 0.85;
+  }
+}
+
+/* ── 区域（zone）：虚线括号 + 顶部标签页 ── */
+.ol-band {
+  position: absolute;
+  border-radius: 10px;
+  pointer-events: none;
+  /* 不带 z-index（设计稿 v6.9）：非 auto 的 z-index 会创建层叠上下文，
+     把标签的 z7 困在 0 层里、整层被卡片 z3 压住——框体本就该在卡片之下，
+     所以靠 DOM 顺序（zones 先于 cards 渲染）而不是 z-index 表达。 */
+
+  &.is-brace {
+    border: 1px dashed var(--zc, var(--app-accent-teal));
+    border-radius: 14px;
+  }
+
+  &.is-box {
+    border: 1px dashed var(--zc, var(--app-accent-teal));
+    border-radius: 12px;
+  }
+
+  &.is-pill {
+    border: 1px dashed var(--zc, var(--app-accent-teal));
+    border-radius: 999px;
+  }
+
+  &.is-solid {
+    border-style: solid;
+  }
+
+  &.is-filled {
+    background: color-mix(in srgb, var(--zc, var(--app-accent-teal-weak)) 30%, transparent);
+  }
+
+  &.is-vt.is-brace {
+    border-top: none;
+    border-bottom: none;
+    border-radius: 14px;
+  }
+
+  &.is-vt.is-pill {
+    border-radius: 36px;
+  }
+
+  &__label {
+    position: absolute;
+    bottom: calc(100% + 1px);
+    left: -1px;
+    z-index: 7;
+    box-sizing: border-box;
+    height: 20px;
+    padding: 0 6px 0 8px;
+    border: 1px solid color-mix(in srgb, var(--zc) 55%, transparent);
+    border-bottom: 0;
+    border-radius: 5px 5px 0 0;
+    background: var(--app-surface-elevated);
+    color: var(--zc);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    pointer-events: auto;
+    cursor: text;
+    max-width: calc(100% + 1px);
+  }
+
+  &.is-vt &__label {
+    bottom: auto;
+    top: -1px;
+    left: calc(100% + 1px);
+    max-width: 196px;
+    border: 1px solid color-mix(in srgb, var(--zc) 55%, transparent);
+    border-left: 0;
+    border-radius: 0 5px 5px 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__x {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--app-text-muted);
+    opacity: 0;
+    cursor: pointer;
+    transition: opacity var(--app-t-fast) var(--app-ease-standard);
+  }
+
+  &__label:hover &__x {
+    opacity: 1;
+  }
+
+  &__x:hover {
+    background: var(--app-error-weak);
+    color: var(--app-error);
+  }
+}
+
+/* ── 浮卡层 ── */
+.ol-free {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 6;
+
+  &__links {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  /* 浮卡牵线：1.2px 实线（虚线在端点处常落进空隙，读起来点线分离）。
+     颜色跟主题走（--app-outline-link 四套主题各自派生），opacity 与设计稿一致 .42 */
+  &__line {
+    fill: none;
+    stroke: var(--app-outline-link);
+    stroke-width: 1.2;
+    stroke-linecap: round;
+    opacity: 0.42;
+  }
+}
+
+/* ── 浮卡（设计稿 .fcard）：头像 + 名字 + hover 才展开的 ↩ / × ── */
+.ol-fcard {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 4px;
+  max-width: 168px;
+  pointer-events: auto;
+  background: var(--app-surface-elevated);
+  border: 1px solid var(--app-border-strong);
+  /* 左缘 3px 身份条 = 实体类型色（设计稿 --fc），与连线的主题色分开 */
+  border-left: 3px solid var(--fc, var(--app-outline-card-border));
+  border-radius: var(--app-radius-pill);
+  box-shadow: var(--app-shadow-card);
+  font-size: 12px;
+  color: var(--app-text);
+  cursor: grab;
+  user-select: none;
+  transition:
+    box-shadow var(--app-t-fast) var(--app-ease-standard),
+    border-color var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    box-shadow: var(--app-shadow-raised);
+  }
+
+  /* 拖拽中（设计稿 .fcard.dragging）：抬起阴影 + 半透明 + 不挡命中，
+     否则 elementFromPoint 永远命中自己，找不到底下的事件卡 */
+  &.is-dragging {
+    cursor: grabbing;
+    box-shadow: var(--app-shadow-pop);
+    z-index: 9;
+    opacity: 0.92;
+    pointer-events: none;
+  }
+
+  /* chip 拖出的跟手幽灵（fixed 视口坐标，由指针直接驱动） */
+  &.is-ghost {
+    position: fixed;
+    z-index: 70;
+    pointer-events: none;
+    opacity: 0.94;
+    box-shadow: var(--app-shadow-pop);
+    transform: rotate(-1.5deg);
+  }
+
+  &__av {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--app-text-inverse);
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  &__nm {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 74px;
+  }
+
+  /* 设计稿：默认 display:none，hover 浮卡才展开（不占位、卡片宽度随之收放） */
+  &__btn {
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--app-text-muted);
+    flex: 0 0 auto;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--app-surface-hover);
+      color: var(--app-text);
+    }
+
+    &.is-del:hover {
+      background: var(--app-error-weak);
+      color: var(--app-error);
+    }
+  }
+
+  &:hover &__btn {
+    display: flex;
+  }
+}
+
+/* 拖拽幽灵卡（设计稿 .ev-wrap.moving）：整卡 fixed 跟手。
+   left/top 由 window 监听直接写视口坐标；无过渡、抬到最高层，卡片本体原样复用，
+   只把边框/阴影切到「被拿起」态（与选中卡同款 primary 边 + 2px 淡环）。 */
+.ol-dragghost {
+  position: fixed;
+  z-index: 99;
+  width: 208px;
+  pointer-events: none;
+  transition: none;
+  will-change: transform;
+  filter: drop-shadow(
+    0 16px 28px color-mix(in srgb, var(--app-text-strong) 16%, transparent)
+  );
+
+  .ol-ev {
+    cursor: grabbing;
+    border-color: var(--app-primary);
+    box-shadow:
+      0 0 0 2px var(--app-primary-weak),
+      var(--app-shadow-card);
+    transform: none;
+  }
+}
+
+/* 空态 */
+.ol-axis__empty {
+  position: absolute;
+  left: 50%;
+  top: 160px;
+  transform: translateX(-50%);
+  text-align: center;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1.8;
+  pointer-events: none;
+
+  b {
+    display: block;
+    font-size: 13px;
+    color: var(--app-text-secondary);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+}
+
+/* era / 泳道右键菜单（Dropdown 内嵌 ul） */
+.ol-era-menu {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  min-width: 200px;
+  background: var(--app-surface-elevated);
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  box-shadow: var(--app-shadow-pop);
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--app-text-secondary);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--app-surface-hover);
+      color: var(--app-text);
+    }
+
+    &.is-danger {
+      color: var(--app-error);
+
+      &:hover {
+        background: var(--app-error-weak);
+      }
+    }
+  }
+}
+
+/* 推进链断口：双击接回（§8.3 / FR-12） */
+.ol-break {
+  position: absolute;
+  z-index: 3;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px dashed var(--app-outline-card-border);
+  border-radius: 50%;
+  background: var(--app-surface-elevated);
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    border-color var(--app-t-fast) var(--app-ease-standard),
+    color var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    border-color: var(--app-primary);
+    color: var(--app-primary);
+  }
+}
+
+/* 纵向区域标签：右侧放不下时收回框内 */
+.ol-band.is-vt .ol-band__label.is-inner {
+  left: 8px;
+  top: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  max-width: calc(100% - 16px);
+}
+
+/* 「改长度…」弹框：起点 + 共几格（最小 1） */
+.ol-erarange {
+  color: var(--app-text-secondary);
+  font-size: 13px;
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ant-input-number {
+    width: 72px;
+  }
+
+  &__hint {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--app-text-muted);
+  }
+}
+
+/* ── 右键菜单（设计稿 .cmenu）：跟随光标、188px 起、点空白 / Esc 关闭 ── */
+.ol-cmenu {
+  position: fixed;
+  z-index: 80;
+  min-width: 188px;
+  padding: 5px;
+  background: var(--app-surface-elevated);
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  box-shadow: var(--app-shadow-pop);
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 13px;
+    color: var(--app-text-secondary);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background var(--app-t-fast) var(--app-ease-standard),
+      color var(--app-t-fast) var(--app-ease-standard);
+
+    &:hover {
+      background: var(--app-surface-hover);
+      color: var(--app-text);
+    }
+
+    &.is-danger {
+      color: var(--app-error);
+
+      &:hover {
+        background: var(--app-error-weak);
+      }
+    }
+  }
+
+  &__sep {
+    height: 1px;
+    margin: 5px 4px;
+    background: var(--app-border);
+  }
+}
+
+/* ── 区域样式浮层（设计稿 .zmenu）：挂在区域标签下方 ── */
+.ol-zmenu {
+  position: fixed;
+  z-index: 80;
+  width: 220px;
+  padding: 9px;
+  background: var(--app-surface-elevated);
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  box-shadow: var(--app-shadow-pop);
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 8px;
+
+    b {
+      width: 26px;
+      flex: 0 0 auto;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--app-text-muted);
+    }
+  }
+
+  &__opt {
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--app-border);
+    border-radius: 6px;
+    background: var(--app-surface);
+    font-size: 12px;
+    color: var(--app-text-secondary);
+    cursor: pointer;
+    transition:
+      background var(--app-t-fast) var(--app-ease-standard),
+      color var(--app-t-fast) var(--app-ease-standard),
+      border-color var(--app-t-fast) var(--app-ease-standard);
+
+    &:hover {
+      background: var(--app-surface-hover);
+      color: var(--app-text);
+    }
+
+    &.is-on {
+      border-color: var(--app-primary);
+      background: var(--app-primary-weak);
+      color: var(--app-primary-strong);
+      font-weight: 600;
+    }
+  }
+
+  &__sw {
+    width: 20px;
+    height: 20px;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    cursor: pointer;
+
+    &.is-on {
+      border-color: var(--app-text-strong);
+    }
+  }
+
+  &__del {
+    width: 100%;
+    height: 28px;
+    margin-top: 2px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 13px;
+    color: var(--app-error);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--app-error-weak);
+    }
+  }
+}

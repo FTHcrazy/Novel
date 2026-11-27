@@ -307,7 +307,7 @@ docs/                                  # 合计 8 篇 md（`docs-index-guard.tes
     ├── map-interaction-spec.md        # 地图交互与快捷键（键位 / 选中态唯一口径）
     ├── map-export-spec.md             # 地图导出
     ├── map-perf-spec.md               # 地图性能口径（产品线 / 压力线两层判据）
-    ├── outline-plan-spec.md           # 大纲产品方案（草案 v5.1 refactor 版：独立走向层零绑定，灵感脉络画布=多层父子+连线三层(结构/推进/关联)+区域+多时间线，框架定 React Flow，大纲视图同源，右页改名伏笔埋设）
+    ├── outline-plan-spec.md           # 大纲产品方案（草案 v6.1 refactor 版：独立走向层零绑定；事件时间轴-只有事件、**顺序只由 lane+sort 决定而位置可自由摆放**（事件卡与角色卡都能拖到画布任意处，SVG 现场画箭头保证恒为一条链）；角色非节点=事件卡内出场 chip、同一实体可多处出场且副本零连线、chip 可拖出成浮卡并用虚线牵引、拖到别的事件即改关联、一键整理清偏移+收浮卡（不动 sort）；脉络在右栏汇总；区域=事件区间派生的边界描边(XMind Boundary 式)；大纲列表同源，右页改名伏笔埋设）
     └── pack-quickcard-spec.md         # 行囊双形态改造（草案：盘点台账 / 条幅窗 / 断点重校）
 ```
 

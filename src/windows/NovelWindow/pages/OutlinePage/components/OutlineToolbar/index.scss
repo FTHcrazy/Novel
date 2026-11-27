@@ -1,0 +1,149 @@
+/**
+ * 工具条样式（v9 原型 .toolbar/.work/.sw-* 同源还原）
+ * 颜色只写 var(--app-*)；字号 ≥12px 无小数（AGENTS §6.1）
+ */
+.ol-toolbar {
+  height: 48px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
+
+  &__back {
+    flex: 0 0 auto;
+  }
+
+  &__switcher {
+    min-width: 0;
+    height: auto;
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  &__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--app-text-strong);
+    letter-spacing: 0.2px;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__badge {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    background: var(--app-primary-weak);
+    color: var(--app-primary);
+    border: 1px solid color-mix(in srgb, var(--app-primary) 26%, transparent);
+    border-radius: var(--app-radius-pill);
+    padding: 0 8px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+  }
+
+  &__meta {
+    font-size: 12px;
+    color: var(--app-text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  &__caret {
+    align-self: center;
+    font-size: 12px;
+    color: var(--app-text-muted);
+  }
+
+  &__bind {
+    flex: 0 0 auto;
+  }
+
+  &__sep {
+    width: 1px;
+    height: 18px;
+    flex: 0 0 auto;
+    background: var(--app-border);
+    margin: 0 2px;
+  }
+
+  &__spacer {
+    flex: 1;
+  }
+
+  &__search {
+    width: 208px;
+    flex: 0 0 auto;
+  }
+
+  &__bindtip {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--app-text-muted);
+  }
+}
+
+/* 切换器下拉面板（Dropdown popup 挂到 body，类名经 classNames 透传） */
+.ol-switcher-popup {
+  .ant-dropdown-menu {
+    max-height: 420px;
+    overflow: auto;
+    min-width: 280px;
+  }
+
+  .ant-dropdown-menu-item-group-title {
+    font-size: 12px;
+    color: var(--app-text-muted);
+  }
+}
+
+.ol-switcher {
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  &__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--app-text-strong);
+
+    &.is-current {
+      color: var(--app-primary);
+      font-weight: 600;
+    }
+  }
+
+  &__meta {
+    flex: 0 0 auto;
+    font-size: 12px;
+    color: var(--app-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__new {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--app-primary);
+    font-weight: 500;
+  }
+
+  &__danger {
+    color: var(--app-error);
+  }
+}

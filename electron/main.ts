@@ -37,6 +37,7 @@ import {
 import { registerNovelPackHandlers } from "./handlers/novel/novel-pack-handlers";
 import { registerNovelSettingHandlers } from "./handlers/novel/novel-setting-handlers";
 import { registerNovelSafetyHandlers } from "./handlers/novel/novel-safety-handlers";
+import { registerOutlineHandlers } from "./handlers/novel/outline-handlers";
 import { registerNovelGlobalSettingHandlers } from "./handlers/novel/novel-global-setting-handlers";
 import { registerNovelGraphHandlers } from "./handlers/novel/novel-graph-handlers";
 import { registerNovelExportHandlers } from "./handlers/novel/novel-export-handlers";
@@ -1196,6 +1197,9 @@ app.whenReady().then(() => {
   // switchUserDb → register 的顺序），它会立即补开一次
   registerNovelDbBridge();
   registerNovelHandlers();
+  // 大纲工作台（outline-plan-spec v7.1）：七表读写与绑定事务，
+  // 依赖 novel-db bridge 已就绪，紧跟 novel handler 注册
+  registerOutlineHandlers();
   // 地图域（map.db 独立库）：bridge 必须早于 handler 注册 —— 理由同 novel.db；
   // flush 回执通道只注册一次，由 createMapWindow 里的 close 拦截配合使用。
   // 构建期裁掉地图窗口（NOVEL_WITH_MAP=0）时整段跳过：不注册通道 → 不建 map.db →

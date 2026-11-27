@@ -175,9 +175,17 @@ describe("preload 白名单（守卫）", () => {
   });
 
   it("关窗请求 / 回执都在白名单里（否则 flush 永远发不出、也回不来）", () => {
-    const receiveBlock = PRELOAD.slice(PRELOAD.indexOf("receive: (channel"), PRELOAD.indexOf("// ── 跨窗口通信"));
+    // 白名单已从 send/receive 函数体提到模块级常量（避免每次调用重建数组），
+    // 断言跟着常量走，别再去切函数体
+    const receiveBlock = PRELOAD.slice(
+      PRELOAD.indexOf("const RECEIVE_CHANNELS"),
+      PRELOAD.indexOf("contextBridge.exposeInMainWorld"),
+    );
     expect(receiveBlock).toContain("map-doc-request-snapshot");
-    const sendBlock = PRELOAD.slice(PRELOAD.indexOf("send: (channel"), PRELOAD.indexOf("receive: (channel"));
+    const sendBlock = PRELOAD.slice(
+      PRELOAD.indexOf("const SEND_CHANNELS"),
+      PRELOAD.indexOf("const RECEIVE_CHANNELS"),
+    );
     expect(sendBlock).toContain("map-doc-flush-done");
   });
 });

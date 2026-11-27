@@ -935,6 +935,42 @@ export function registerNovelHandlers(): void {
       // 之后、作品行之前 —— 此时 work_id 仍可用，且不与 pack 的多态子查询抢顺序。
       dbRun("DELETE FROM novel_config WHERE key LIKE ?", [`novel_rel_graph_v1:${id}:%`]);
 
+      // 大纲工作台（outline-plan-spec v7.1）：该作品的大纲整套物理删除。
+      // casts 先于 events（引用 event_id，子查询反查 project 归属）；
+      // 与上面 pack 多态表同一口径：子查询变空集就一条都删不掉。
+      dbRun(
+        `DELETE FROM novel_outline_casts
+          WHERE event_id IN (SELECT id FROM novel_outline_events WHERE project_id IN (
+            SELECT id FROM novel_outline_projects WHERE work_id = ?))`,
+        [id],
+      );
+      dbRun(
+        `DELETE FROM novel_outline_events
+          WHERE project_id IN (SELECT id FROM novel_outline_projects WHERE work_id = ?)`,
+        [id],
+      );
+      dbRun(
+        `DELETE FROM novel_outline_lanes
+          WHERE project_id IN (SELECT id FROM novel_outline_projects WHERE work_id = ?)`,
+        [id],
+      );
+      dbRun(
+        `DELETE FROM novel_outline_entities
+          WHERE project_id IN (SELECT id FROM novel_outline_projects WHERE work_id = ?)`,
+        [id],
+      );
+      dbRun(
+        `DELETE FROM novel_outline_zones
+          WHERE project_id IN (SELECT id FROM novel_outline_projects WHERE work_id = ?)`,
+        [id],
+      );
+      dbRun(
+        `DELETE FROM novel_outline_eras
+          WHERE project_id IN (SELECT id FROM novel_outline_projects WHERE work_id = ?)`,
+        [id],
+      );
+      dbRun("DELETE FROM novel_outline_projects WHERE work_id = ?", [id]);
+
       // 作品行本身也要删：漏掉会导致「删光后 reload 复活全部作品名」
       dbRun("DELETE FROM novel_works WHERE id = ?", [id]);
     });

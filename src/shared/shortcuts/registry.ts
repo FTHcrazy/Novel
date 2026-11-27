@@ -94,6 +94,14 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
     editable: true,
   },
   {
+    id: "openOutline",
+    label: "打开大纲工作台",
+    description: "进入事件时间轴：书架 / 编辑器均可直达",
+    group: "navigation",
+    defaultKeys: "Mod+Shift+O",
+    editable: true,
+  },
+  {
     id: "openSettings",
     label: "打开设定中心",
     description: "境界 / 功法 / 稀有度等序列的管理入口",

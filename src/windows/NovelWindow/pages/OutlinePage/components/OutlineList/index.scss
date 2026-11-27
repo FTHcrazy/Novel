@@ -1,0 +1,225 @@
+/** 大纲视图（多列分组网格，v9 原型 .ol-wrap/.ol-sec/.ol-row 同源还原） */
+.ol-list {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.ol-list__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.ol-list__sec {
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface-elevated);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--app-shadow-ambient);
+
+  &.is-loose {
+    border-style: dashed;
+    background: var(--app-surface);
+  }
+
+  &.is-dim {
+    opacity: 0.32;
+  }
+}
+
+.ol-list__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
+  flex: 0 0 auto;
+
+  b {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--app-text-strong);
+  }
+
+  span {
+    font-size: 12px;
+    color: var(--app-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.ol-list__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.ol-list__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--app-border);
+  background: transparent;
+  position: relative;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  height: auto;
+  font: inherit;
+
+  /* antd Button 会把内容包进一层 span：让它不参与布局，子元素直接吃 flex */
+  > span {
+    display: contents;
+  }
+
+  /* 覆盖 antd 文本按钮的内边距与 hover（行自身有 hover 语义） */
+  &.ant-btn {
+    padding: 11px 14px;
+    border-radius: 0;
+    color: inherit;
+  }
+
+  &.ant-btn:hover {
+    background: var(--app-surface-hover);
+    color: inherit;
+  }
+  transition: background var(--app-t-fast) var(--app-ease-standard);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: var(--app-surface-hover);
+  }
+
+  &.is-sel {
+    background: var(--app-primary-weak);
+
+    &::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 6px;
+      bottom: 6px;
+      width: 2px;
+      border-radius: 2px;
+      background: var(--app-primary);
+    }
+  }
+
+  &.is-dim {
+    opacity: 0.32;
+  }
+}
+
+.ol-list__idx {
+  flex: 0 0 auto;
+  width: 18px;
+  text-align: right;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ol-list__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ol-list__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text-strong);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ol-list__when {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ol-list__body {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--app-text-secondary);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ol-list__casts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.ol-list__cast {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px 0 3px;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-surface-alt);
+  font-size: 12px;
+  color: var(--app-text-secondary);
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ol-list__av {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--app-text-inverse);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.ol-list__empty {
+  padding: 18px 10px;
+  text-align: center;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.ol-list__empty-lg {
+  margin: 32px auto 0;
+  max-width: 520px;
+  padding: 18px 20px;
+  border: 1px dashed var(--app-border);
+  border-radius: 12px;
+  text-align: center;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 1.8;
+}

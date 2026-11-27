@@ -1,0 +1,268 @@
+/**
+ * 事件卡样式（v9 原型 .ev/.cast/.pop 同源还原）
+ * 卡高构成恒定：min-height 150 = 摘要固定两行(38) + 出场区 35 + 头部/间距
+ */
+.ol-ev {
+  background: var(--app-surface-elevated);
+  /* 卡片描边走大纲专用档：通用 --app-border 在四套主题下都贴底色，卡面糊在画布上 */
+  border: 1px solid var(--app-outline-card-border);
+  border-radius: 12px;
+  padding: 12px 12px 10px;
+  min-height: 150px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--app-shadow-ambient);
+  cursor: grab;
+  position: relative;
+  user-select: none;
+  transition:
+    border-color var(--app-t-fast) var(--app-ease-standard),
+    box-shadow var(--app-t-fast) var(--app-ease-standard),
+    transform var(--app-t-fast) var(--app-ease-standard),
+    opacity var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    border-color: var(--app-outline-link);
+    box-shadow: var(--app-shadow-card);
+    transform: translateY(-1px);
+  }
+
+  &.is-sel {
+    border-color: var(--app-primary);
+    box-shadow:
+      0 0 0 2px var(--app-primary-weak),
+      var(--app-shadow-card);
+
+    .ol-ev__idx {
+      background: var(--app-primary-weak);
+      color: var(--app-primary-strong);
+    }
+  }
+
+  &.is-dim {
+    opacity: 0.32;
+  }
+
+  &.is-arm {
+    border-color: var(--app-primary);
+    border-style: dashed;
+    box-shadow: 0 0 0 2px var(--app-primary-weak);
+  }
+
+  /* 改挂 / 收纳落点：主色细边 + 3px 淡环（设计稿 .ev.drop-ev），比实心环克制 */
+  &.is-castdrop {
+    border-color: var(--app-primary);
+    box-shadow:
+      0 0 0 3px var(--app-primary-weak),
+      var(--app-shadow-card);
+  }
+}
+
+.ol-ev__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ol-ev__idx {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  background: var(--app-surface-alt);
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ol-ev__t {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text-strong);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.1px;
+}
+
+/* 摘要固定两行高（19×2=38），空/满卡同构不漂高 */
+.ol-ev__d {
+  font-size: 12px;
+  color: var(--app-text-secondary);
+  line-height: 19px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+
+  &.is-empty {
+    color: var(--app-text-muted);
+  }
+}
+
+.ol-ev__when {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.ol-ev__dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--app-text-disabled);
+  flex: 0 0 auto;
+}
+
+.ol-ev__chap {
+  flex: 0 0 auto;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-primary-weak);
+  color: var(--app-primary-strong);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 出场区恒 35px：1px 分隔线 + 10px 上内距 + 24px chip 行（空卡也占满） */
+.ol-ev__casts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+  padding-top: 10px;
+  padding-right: 26px;
+  border-top: 1px solid var(--app-border);
+  min-height: 35px;
+  flex: 0 0 auto;
+  align-content: flex-start;
+  align-items: flex-start;
+  position: relative;
+}
+
+.ol-cast {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 5px 0 3px;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-surface-alt);
+  border: 1px solid transparent;
+  font-size: 12px;
+  color: var(--app-text-secondary);
+  max-width: 100%;
+  position: relative;
+  transition:
+    border-color var(--app-t-fast) var(--app-ease-standard),
+    background var(--app-t-fast) var(--app-ease-standard),
+    color var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    border-color: var(--app-border-strong);
+    background: var(--app-surface-hover);
+    color: var(--app-text);
+  }
+
+  /* 被拖出的 chip：淡出 32%（§8.8 反馈） */
+  &.is-dragging {
+    opacity: 0.32;
+  }
+
+  &__nm {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 62px;
+  }
+
+  /* ✕ 用 visibility 占位（恒宽），hover 才浮现——chip 行零位移 */
+  &__x {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--app-text-muted);
+    margin-left: 1px;
+    flex: 0 0 auto;
+    visibility: hidden;
+    cursor: pointer;
+    transition:
+      background var(--app-t-fast) var(--app-ease-standard),
+      color var(--app-t-fast) var(--app-ease-standard);
+  }
+
+  &:hover &__x {
+    visibility: visible;
+  }
+
+  &__x:hover {
+    background: var(--app-error-weak);
+    color: var(--app-error);
+  }
+
+  &__more {
+    height: 24px;
+    padding: 0 7px;
+    border-radius: var(--app-radius-pill);
+    background: var(--app-surface-alt);
+    font-size: 12px;
+    color: var(--app-text-muted);
+    display: inline-flex;
+    align-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* 设计稿：鼠标进卡，全部 chip 的 ✕ 一起浮现（不是只浮当前 chip），
+   visibility 占位保证 chip 行宽度零位移 */
+.ol-ev:hover .ol-cast__x {
+  visibility: visible;
+}
+
+.ol-ev__cast-add {
+  position: absolute;
+  right: 0;
+  top: 10px;
+  height: 24px;
+  width: 24px;
+  border-radius: 50%;
+  border: 1px dashed var(--app-border-strong);
+  color: var(--app-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  transition:
+    border-color var(--app-t-fast) var(--app-ease-standard),
+    color var(--app-t-fast) var(--app-ease-standard),
+    background var(--app-t-fast) var(--app-ease-standard);
+
+  &:hover {
+    border-color: var(--app-primary);
+    color: var(--app-primary);
+    background: var(--app-primary-weak);
+  }
+}

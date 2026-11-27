@@ -154,6 +154,107 @@ function initializeNovelDb(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_novel_outline_work ON novel_outline_entries(work_id);
 
+    -- ── 大纲工作台（事件时间轴，spec：docs/spec/outline-plan-spec.md v7.1）──
+    -- 七表：projects（大纲域唯一挂作品点）+ lanes / events / entities / casts /
+    -- zones / eras 六表按 project_id 隔离。章节关联不在六表内——章节域自己的
+    -- 列 novel_chapters.outline_event_id（见下方增量迁移），六表对章节域零感知。
+    -- 大纲先行：project.work_id IS NULL = 草稿态，可先于任何作品存在；
+    -- 部分唯一索引硬守「一作品一份大纲」（多份草稿 NULL 不受限）。
+    CREATE TABLE IF NOT EXISTS novel_outline_projects (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL DEFAULT '',
+      work_id    TEXT,
+      sort       INTEGER NOT NULL DEFAULT 0,
+      -- 软删除标记（回收站）：NULL = 正常；有值 = 已进回收站的 ms 时间戳。
+      -- 六表数据原位保留，恢复即清标记；彻底删除才级联物理删六表。
+      deleted_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_ol_projects_work
+      ON novel_outline_projects(work_id) WHERE work_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_ol_projects_updated ON novel_outline_projects(updated_at);
+    CREATE TABLE IF NOT EXISTS novel_outline_lanes (
+      id         TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name       TEXT NOT NULL DEFAULT '',
+      note       TEXT NOT NULL DEFAULT '',
+      sort       INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ol_lanes_project ON novel_outline_lanes(project_id, sort);
+    CREATE TABLE IF NOT EXISTS novel_outline_events (
+      id           TEXT PRIMARY KEY,
+      project_id   TEXT NOT NULL,
+      lane_id      TEXT,
+      slot         INTEGER NOT NULL DEFAULT 0,
+      sort         INTEGER NOT NULL DEFAULT 0,
+      break_before INTEGER NOT NULL DEFAULT 0 CHECK (break_before IN (0,1)),
+      title        TEXT NOT NULL DEFAULT '',
+      body         TEXT NOT NULL DEFAULT '',
+      when_text    TEXT NOT NULL DEFAULT '',
+      starred      INTEGER NOT NULL DEFAULT 0,
+      created_at   INTEGER NOT NULL,
+      updated_at   INTEGER NOT NULL,
+      CHECK (slot >= 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ol_events_lane
+      ON novel_outline_events(project_id, lane_id, slot, sort);
+    CREATE TABLE IF NOT EXISTS novel_outline_entities (
+      id         TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      type       TEXT NOT NULL DEFAULT 'char',
+      name       TEXT NOT NULL DEFAULT '',
+      aliases    TEXT NOT NULL DEFAULT '',
+      body       TEXT NOT NULL DEFAULT '',
+      color_slot TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ol_entities_project ON novel_outline_entities(project_id, type);
+    CREATE TABLE IF NOT EXISTS novel_outline_casts (
+      event_id   TEXT NOT NULL,
+      entity_id  TEXT NOT NULL,
+      role_label TEXT NOT NULL DEFAULT '',
+      sort       INTEGER NOT NULL DEFAULT 0,
+      -- NULL = 收在事件卡内的 chip；有值 = 浮卡画布坐标（宿主转待归类 / 删线时置 NULL）
+      card_x     INTEGER,
+      card_y     INTEGER,
+      PRIMARY KEY (event_id, entity_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ol_casts_entity ON novel_outline_casts(entity_id);
+    CREATE TABLE IF NOT EXISTS novel_outline_zones (
+      id         TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      lane_id    TEXT NOT NULL,
+      name       TEXT NOT NULL DEFAULT '',
+      note       TEXT NOT NULL DEFAULT '',
+      color_slot TEXT NOT NULL DEFAULT 'teal',
+      shape      TEXT NOT NULL DEFAULT 'brace',
+      solid      INTEGER NOT NULL DEFAULT 0,
+      filled     INTEGER NOT NULL DEFAULT 0,
+      from_slot  INTEGER NOT NULL,
+      to_slot    INTEGER NOT NULL,
+      sort       INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ol_zones_project ON novel_outline_zones(project_id, lane_id, sort);
+    CREATE TABLE IF NOT EXISTS novel_outline_eras (
+      id         TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name       TEXT NOT NULL DEFAULT '',
+      note       TEXT NOT NULL DEFAULT '',
+      color_slot TEXT NOT NULL DEFAULT 'blue',
+      from_slot  INTEGER NOT NULL,
+      to_slot    INTEGER NOT NULL,
+      sort       INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ol_eras_project ON novel_outline_eras(project_id, from_slot);
+
     -- ── 要素库（实体 + 多态关联）──
     CREATE TABLE IF NOT EXISTS novel_entities (
       id TEXT PRIMARY KEY,
@@ -651,6 +752,32 @@ function initializeNovelDb(database: Database.Database): void {
       ON novel_setting_categories(source_global_id);
     CREATE INDEX IF NOT EXISTS idx_novel_setting_lv_source
       ON novel_setting_levels(source_global_id);
+  `);
+
+  // 大纲工作台（outline-plan-spec v7.1）：章节侧关联列（§7.4）。
+  // 「这一章拍的是这场戏」；1 章 ↔ 1 事件，1 事件 ↔ N 章。可空列，老章节
+  // 全部 NULL = 未拍入，语义天然正确、无需回填。索引供「已拍 N 章」角标
+  // 反查与删事件级联清引用。
+  {
+    const chapterColumns = database.pragma("table_info(novel_chapters)") as Array<{
+      name: string;
+    }>;
+    if (!chapterColumns.some((column) => column.name === "outline_event_id")) {
+      database.exec("ALTER TABLE novel_chapters ADD COLUMN outline_event_id TEXT");
+    }
+    database.exec(
+      `CREATE INDEX IF NOT EXISTS idx_novel_chapters_outline_event
+        ON novel_chapters(outline_event_id)`,
+    );
+  }
+
+  // 大纲七表（v7.1）： CASTS 孤儿清理——事件被外部物理删除后（如老版本数据
+  // 手工清理），cast 行会悬挂在 event_id 上；启动时顺手清一次（幂等）。
+  database.exec(`
+    DELETE FROM novel_outline_casts
+      WHERE event_id NOT IN (SELECT id FROM novel_outline_events);
+    DELETE FROM novel_outline_casts
+      WHERE entity_id NOT IN (SELECT id FROM novel_outline_entities);
   `);
 }
 
