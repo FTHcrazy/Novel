@@ -1,7 +1,7 @@
 {
   "name": "novel",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.5",
   "description": "Novel Desktop Application",
   "main": "dist-electron/main.js",
   "author": "FTH",

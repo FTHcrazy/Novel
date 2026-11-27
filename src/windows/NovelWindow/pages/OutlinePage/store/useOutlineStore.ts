@@ -157,6 +157,8 @@ interface OutlineState {
   undoStack: OutlineSnapshot[];
   /** Enter 聚焦正文：自增即请求右栏聚焦（跨组件信号，不做全局 DOM 查询） */
   bodyFocusToken: number;
+  /** 画布缩放（0.5–2，session 级不落库）：Ctrl+滚轮 / 工具栏按钮调整 */
+  zoom: number;
 
   // ── 装载与项目生命周期 ──
   load: (projectId: string) => Promise<void>;
@@ -172,6 +174,7 @@ interface OutlineState {
   setMode: (mode: OutlineMode) => void;
   setDir: (dir: OutlineDir) => void;
   setQuery: (query: string) => void;
+  setZoom: (zoom: number) => void;
   selectEvent: (id: string | null) => void;
   selectEntity: (id: string | null) => void;
   armZone: (eventId: string | null) => void;
@@ -305,6 +308,20 @@ function mergeEraRanges(
 /** 空画布占位段（FR-15a）：UI 态不落库；改名 / 新增段后「转正」 */
 export const PLACEHOLDER_ERA_ID = "__placeholder__";
 
+/**
+ * 区域默认色槽（与 OutlineAxis 的 ZONE_SLOTS / ZONE_COLOR 同一组七色）：
+ * 新建区域按下标轮换取色，相邻区域不撞色；colorSlot 仍可经样式浮层自定义。
+ */
+export const ZONE_COLOR_SLOTS = [
+  "teal",
+  "rose",
+  "blue",
+  "amber",
+  "purple",
+  "green",
+  "orange",
+] as const;
+
 function ensurePlaceholderEra(eras: OutlineEraDTO[]): OutlineEraDTO[] {
   if (eras.length > 0) return eras;
   return [
@@ -346,6 +363,7 @@ export const useOutlineStore = create<OutlineState>((set, get) => ({
   drag: null,
   undoStack: [],
   bodyFocusToken: 0,
+  zoom: 1,
 
   load: async (projectId) => {
     const seq = ++outlineLoadSeq;
@@ -485,6 +503,7 @@ export const useOutlineStore = create<OutlineState>((set, get) => ({
   setMode: (mode) => set({ mode }),
   setDir: (dir) => set({ dir }),
   setQuery: (query) => set({ query }),
+  setZoom: (zoom) => set({ zoom: Math.min(2, Math.max(0.5, zoom)) }),
   selectEvent: (id) => set({ selEventId: id, selEntityId: null }),
   selectEntity: (id) => set({ selEntityId: id }),
   armZone: (eventId) => set({ zoneArm: eventId }),
@@ -908,12 +927,13 @@ export const useOutlineStore = create<OutlineState>((set, get) => ({
     if (!project) return;
     const from = Math.min(a.slot, b.slot);
     const to = Math.max(a.slot, b.slot);
+    // 默认色从七色槽按已有区域数轮换（相邻区域不撞色）；用户仍可右键标签自定义
     const zone: OutlineZoneDTO = {
       id: `ol-z-${Date.now()}`,
       laneId: a.laneId,
       name: "",
       note: "",
-      colorSlot: "teal",
+      colorSlot: ZONE_COLOR_SLOTS[state.zones.length % ZONE_COLOR_SLOTS.length],
       shape: "brace",
       solid: false,
       filled: false,
@@ -949,10 +969,22 @@ export const useOutlineStore = create<OutlineState>((set, get) => ({
 
   /** 时代带：前方 / 后方新增（默认 1 格紧贴，自动进改名，FR-15b）。
    *  锚点为 0 或占位段时不能直接取 from-1/0 —— 新段会与邻段重叠落库，
-   *  这里统一跑一遍让位 + 收拢再写回。 */
+   *  这里统一跑一遍让位 + 收拢再写回。
+   *  占位段（空白大纲首段）先转正再贴着新增：直接按占位过滤会把用户划下的
+   *  领地整个吞掉——新段落在 0..0 顶替原段，视觉上就是「原来的时间段被吞」。 */
   addEraNextTo: async (eraId, before) => {
     const state = get();
     if (!state.project) return null;
+    if (eraId === PLACEHOLDER_ERA_ID) {
+      await get().patchEra(PLACEHOLDER_ERA_ID, {});
+      const promoted = get()
+        .eras.find((era) => era.id !== PLACEHOLDER_ERA_ID);
+      if (!promoted) return null;
+      return get().addEraAt(
+        before ? promoted.fromSlot - 1 : promoted.toSlot + 1,
+        0,
+      );
+    }
     const eras = state.eras.filter((era) => era.id !== PLACEHOLDER_ERA_ID);
     const anchor = eras.find((era) => era.id === eraId);
     const from = anchor
@@ -1041,7 +1073,18 @@ export const useOutlineStore = create<OutlineState>((set, get) => ({
       next.fromSlot,
       next.toSlot,
     );
-    const eras = ensurePlaceholderEra(mergeEraRanges(realEras, resized.eras));
+    const eras = ensurePlaceholderEra(mergeEraRanges(realEras, resized.eras)).map(
+      (item) => {
+        if (item.id !== id) return item;
+        // mergeEraRanges 只回填槽号、其余字段取自改动前的段：把 patch 里的
+        // 非几何字段（改名 / 换色 / 备注）重新盖上，否则改名连内存都进不去
+        //（UI 立刻显示旧名，落库自然也是旧名）。
+        const meta = { ...patch } as Partial<OutlineEraDTO>;
+        delete meta.fromSlot;
+        delete meta.toSlot;
+        return { ...item, ...meta };
+      },
+    );
     const events = state.events.map((event) => {
       const slot = resized.moves.get(event.id);
       return slot === undefined ? event : { ...event, slot };
@@ -1051,8 +1094,14 @@ export const useOutlineStore = create<OutlineState>((set, get) => ({
       return shift ? { ...zone, ...shift } : zone;
     });
     set({ eras, events, zones });
+    // 被编辑段本身无条件落库：改名 / 换色不产生槽位差，旧逻辑「只有区间变化
+    // 才写库」会把新名字静默吞掉——重启后段名回退为空（空白大纲首次命名必踩）。
+    const edited = eras.find((item) => item.id === id);
+    if (edited && id !== PLACEHOLDER_ERA_ID) {
+      await commit(saveOutlineEra({ ...edited, projectId }));
+    }
     for (const item of eras) {
-      if (item.id === PLACEHOLDER_ERA_ID) continue;
+      if (item.id === id || item.id === PLACEHOLDER_ERA_ID) continue;
       const before = state.eras.find((prev) => prev.id === item.id);
       if (
         !before ||
@@ -1256,9 +1305,8 @@ export const useOutlineStore = create<OutlineState>((set, get) => ({
       void fb().message.success(
         `已移入「${laneName || "未命名时间线"}」第 ${drag.target.slot + 1} 格`,
       );
-    } else {
-      void fb().message.success(`已吸附到第 ${drag.target.slot + 1} 格`);
     }
+    // 同一条时间线内挪格静默：卡片已落位、视觉自明，Toast 属噪音
   },
 
   hitTest: (x, y, slotsTop, bands, rowPitch) => {
@@ -1319,6 +1367,7 @@ export function resetOutlineStore(): void {
     drag: null,
     undoStack: [],
     bodyFocusToken: 0,
+    zoom: 1,
   });
 }
 

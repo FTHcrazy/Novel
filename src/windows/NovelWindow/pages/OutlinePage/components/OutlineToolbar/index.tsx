@@ -11,6 +11,8 @@ import {
   PlusOutlined,
   SearchOutlined,
   SortAscendingOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
 } from "@ant-design/icons";
 import {
   useOutlineStore,
@@ -41,9 +43,11 @@ export default function OutlineToolbar({ onBackToShelf }: { onBackToShelf: () =>
   const mode = useOutlineStore((s) => s.mode);
   const dir = useOutlineStore((s) => s.dir);
   const query = useOutlineStore((s) => s.query);
+  const zoom = useOutlineStore((s) => s.zoom);
   const setMode = useOutlineStore((s) => s.setMode);
   const setDir = useOutlineStore((s) => s.setDir);
   const setQuery = useOutlineStore((s) => s.setQuery);
+  const setZoom = useOutlineStore((s) => s.setZoom);
   const newDraft = useOutlineStore((s) => s.newDraft);
   const openDraft = useOutlineStore((s) => s.openDraft);
   const trashProject = useOutlineStore((s) => s.trashProject);
@@ -186,7 +190,14 @@ export default function OutlineToolbar({ onBackToShelf }: { onBackToShelf: () =>
       </Dropdown>
       {isDraft && (
         <Tooltip title="按此大纲创建作品并绑定（单事务，一作品一份大纲）">
-          <Button className="ol-toolbar__bind" onClick={() => setBindOpen(true)}>
+          {/* 大纲已有名字 → 预填书名；未命名 → 空，创建后书名自动回填大纲名 */}
+          <Button
+            className="ol-toolbar__bind"
+            onClick={() => {
+              setBindName(project?.name?.trim() ? project.name : "");
+              setBindOpen(true);
+            }}
+          >
             由此创建作品
           </Button>
         </Tooltip>
@@ -210,6 +221,29 @@ export default function OutlineToolbar({ onBackToShelf }: { onBackToShelf: () =>
           ]}
         />
       )}
+      {mode === "axis" && (
+        <>
+          <Tooltip title="Ctrl + 滚轮也可以缩放画布">
+            <Button
+              icon={<ZoomOutOutlined />}
+              onClick={() => setZoom(zoom - 0.1)}
+              aria-label="缩小画布"
+            />
+          </Tooltip>
+          <Tooltip title="点击重置为 100%">
+            <Button onClick={() => setZoom(1)} aria-label="重置缩放">
+              {Math.round(zoom * 100)}%
+            </Button>
+          </Tooltip>
+          <Tooltip title="Ctrl + 滚轮也可以缩放画布">
+            <Button
+              icon={<ZoomInOutlined />}
+              onClick={() => setZoom(zoom + 0.1)}
+              aria-label="放大画布"
+            />
+          </Tooltip>
+        </>
+      )}
       <span className="ol-toolbar__spacer" />
       <Input
         className="ol-toolbar__search"
@@ -219,7 +253,7 @@ export default function OutlineToolbar({ onBackToShelf }: { onBackToShelf: () =>
         onChange={(event) => setQuery(event.target.value)}
         allowClear
       />
-      <Button onClick={() => void addLane()}>轨道</Button>
+      <Button onClick={() => void addLane()}>事件线轨道</Button>
       <Button icon={<SortAscendingOutlined />} onClick={tidy}>
         一键整理
       </Button>
@@ -240,8 +274,13 @@ export default function OutlineToolbar({ onBackToShelf }: { onBackToShelf: () =>
             void message.warning("书名必填");
             return;
           }
+          const wasUnnamed = !project?.name?.trim();
           const ok = await bindWork(name, null);
           if (ok) {
+            // 大纲未命名 → 书名自动同步成大纲名（双向同步的另一半）
+            if (wasUnnamed && project) {
+              await useOutlineStore.getState().renameProjectOf(project.id, name);
+            }
             setBindOpen(false);
             setBindName("");
           }

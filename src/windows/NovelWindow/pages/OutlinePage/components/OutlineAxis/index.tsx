@@ -29,7 +29,7 @@ import {
   ROW_GAP,
   ROW_TOP,
   STACK_GAP,
-  buildLaneBands,
+  type LaneBand,
   laneRowHeight,
   stackCardTop,
   GUTTER,
@@ -78,6 +78,11 @@ const V_SLOT_PAD = 12;
 // 行框——渲染后用实测值校正（见 measureCardHeight）。
 const CARD_H_FALLBACK = 172;
 
+/** 区域嵌套：每层外框上移（横）/左扩（纵）的步长 = 标签页高 20 + 呼吸位 4 */
+const ZONE_NEST_STEP = 24;
+/** 横向嵌套外框最多上移层数：再往上会压进时代带（行内上留白只有 58px） */
+const ZONE_NEST_MAX = 2;
+
 const ZONE_COLOR: Record<string, string> = {
   teal: "var(--app-accent-teal)",
   rose: "var(--app-accent-rose)",
@@ -108,31 +113,49 @@ const LANE_SLOTS = [
 const laneColorOf = (index: number): string =>
   `var(--app-accent-${LANE_SLOTS[index % LANE_SLOTS.length]})`;
 
-/** 就地改名小输入框（双击浮出，Enter/失焦提交） */
+/** 就地改名小输入框（双击浮出，Enter/失焦提交，Esc 取消；bare=嵌进标签页的无边框样式） */
 function InlineInput({
   initial,
   maxLength,
   width,
+  bare,
+  placeholder,
   onCommit,
 }: {
   initial: string;
   maxLength: number;
   width: number;
+  bare?: boolean;
+  placeholder?: string;
   onCommit: (value: string) => void;
 }) {
   const [value, setValue] = useState(initial);
+  // Enter 提交后必然再触发一次失焦：done 闸保证 onCommit 只跑一次
+  const done = useRef(false);
+  const finish = (final: string): void => {
+    if (done.current) return;
+    done.current = true;
+    onCommit(final.trim());
+  };
   return (
     <Input
       size="small"
       autoFocus
       value={value}
       maxLength={maxLength}
+      placeholder={placeholder}
       style={{ width }}
+      className={bare ? "ol-inline-bare" : undefined}
       onChange={(e) => setValue(e.target.value)}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
-      onPressEnter={() => onCommit(value.trim())}
-      onBlur={() => onCommit(value.trim())}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Escape") finish(""); // 取消：空串让上层跳过落库
+      }}
+      onPressEnter={() => finish(value)}
+      onBlur={() => finish(value)}
     />
   );
 }
@@ -359,6 +382,7 @@ function ZoneStyleMenu({
 
 export default function OutlineAxis() {
   const dir = useOutlineStore((s) => s.dir);
+  const zoom = useOutlineStore((s) => s.zoom);
   const lanes = useOutlineStore((s) => s.lanes);
   const events = useOutlineStore((s) => s.events);
   const entities = useOutlineStore((s) => s.entities);
@@ -394,6 +418,11 @@ export default function OutlineAxis() {
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
+  /** 缩放换算：屏幕坐标 → 画布自然坐标（CSS zoom 只缩显示，几何常量仍是自然 px） */
+  const toCanvasX = (clientX: number, rectLeft: number): number =>
+    (clientX - rectLeft) / zoom;
+  const toCanvasY = (clientY: number, rectTop: number): number =>
+    (clientY - rectTop) / zoom;
   /** 抓取偏移（指针相对卡片左上角）：整卡跟手时保持按下点不动，而不是跳到指针下方 */
   const grabRef = useRef({ x: 14, y: 12 });
   /** chip 拖拽幽灵（fixed，跟手；用 ref 改位置，避免每帧 React 渲染整块画布） */
@@ -505,9 +534,59 @@ export default function OutlineAxis() {
   }, [sortedLanes, events]);
 
   /**
+   * 区域嵌套深度：同泳道内两个区域**重叠**时，跨度大的当外层（框定范围大的
+   * 区域包在外面、小的依次在内）；包含关系自然满足，跨度相等按 id 决胜负，
+   * 保证包含关系单向、深度无环。视觉区间 = 区间内实际成员卡的收包
+   * （renderZone 画的不是 fromSlot/toSlot 本身）。
+   */
+  const zoneDepth = useMemo(() => {
+    const ranges = new Map<string, { lane: string; from: number; to: number }>();
+    for (const zone of zones) {
+      const members = events.filter(
+        (event) =>
+          event.laneId === zone.laneId &&
+          event.slot >= zone.fromSlot &&
+          event.slot <= zone.toSlot,
+      );
+      if (members.length === 0) continue; // 空区不渲染，不参与嵌套
+      ranges.set(zone.id, {
+        lane: zone.laneId,
+        from: Math.min(...members.map((event) => event.slot)),
+        to: Math.max(...members.map((event) => event.slot)),
+      });
+    }
+    const depth = new Map<string, number>();
+    for (const [id, range] of ranges) {
+      let level = 0;
+      for (const [otherId, other] of ranges) {
+        if (otherId === id || other.lane !== range.lane) continue;
+        const overlaps = other.from <= range.to && other.to >= range.from;
+        if (!overlaps) continue;
+        const spanDiff = other.to - other.from - (range.to - range.from);
+        // 跨度大者在外；全等跨度 id 小的当外层（稳定且无环）
+        if (spanDiff > 0 || (spanDiff === 0 && otherId < id)) level += 1;
+      }
+      depth.set(id, level);
+    }
+    return depth;
+  }, [zones, events]);
+
+  /** 每条泳道的最大嵌套深度：行带按它加高顶部留白，嵌套标签不压时代带 */
+  const zoneNestByLane = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const zone of zones) {
+      const level = Math.min(zoneDepth.get(zone.id) ?? 0, ZONE_NEST_MAX);
+      map.set(zone.laneId, Math.max(map.get(zone.laneId) ?? 0, level));
+    }
+    return map;
+  }, [zones, zoneDepth]);
+
+  /**
    * 横向泳道行带：行高 = 上留白 + 本行最大堆叠层数 × 卡高 + 层间距 + 下留白。
    * 行带是渲染（行框 / 卡位 / zone / 连线）、命中、落格高亮的唯一几何来源，
    * 不再假设「所有行一样高、每行只放一张卡」。
+   * 含嵌套区域的行额外加高顶部留白：外层框逐级上移后标签仍落在自己行内，
+   * 不会压住时代带 / 上一行。
    */
   const laneBands = useMemo(() => {
     // 每条泳道同槽最多几张卡 = 该行要竖向展开的层数
@@ -518,8 +597,17 @@ export default function OutlineAxis() {
       }
       return Math.max(1, ...depthBySlot.values());
     });
-    return buildLaneBands(depths, cardH, LANES_TOP);
-  }, [sortedLanes, chainMap, cardH]);
+    const bands: LaneBand[] = [];
+    let cursor = LANES_TOP;
+    for (let i = 0; i < sortedLanes.length; i++) {
+      const nest = zoneNestByLane.get(sortedLanes[i].id) ?? 0;
+      const pad = nest > 1 ? (nest - 1) * ZONE_NEST_STEP : 0;
+      const height = laneRowHeight(depths[i], cardH);
+      bands.push({ top: cursor + pad, height: height + pad });
+      cursor += height + pad;
+    }
+    return bands;
+  }, [sortedLanes, chainMap, cardH, zoneNestByLane]);
 
   /** 行带兜底（泳道索引尚未同步时也不把卡画到画布外） */
   const fallbackBand = useMemo(
@@ -638,14 +726,14 @@ export default function OutlineAxis() {
       const target = inCanvas
         ? dir === "h"
           ? state.hitTest(
-              e.clientX - rect.left,
-              e.clientY - rect.top,
+              toCanvasX(e.clientX, rect.left),
+              toCanvasY(e.clientY, rect.top),
               0,
               laneBands,
             )
           : state.hitTest(
-              e.clientX - rect.left,
-              e.clientY - rect.top,
+              toCanvasX(e.clientX, rect.left),
+              toCanvasY(e.clientY, rect.top),
               V_SLOTS_TOP,
               [],
               rowPitch,
@@ -671,7 +759,24 @@ export default function OutlineAxis() {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [dragging, dir, laneBands, rowPitch]);
+  }, [dragging, dir, laneBands, rowPitch, zoom]);
+
+  /* ── 画布缩放：Ctrl/⌘ + 滚轮（0.5–2）。
+     React 的 onWheel 在根上是 passive 的，preventDefault 必须走原生监听；
+     监听挂 canvasRef（横/纵两分支共用引用），切方向时重挂。 ── */
+  useEffect(() => {
+    const node = canvasRef.current;
+    if (!node) return undefined;
+    const onWheel = (e: WheelEvent): void => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const z = useOutlineStore.getState().zoom;
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      useOutlineStore.getState().setZoom(Math.round(z * factor * 100) / 100);
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
+  }, [dir]);
 
   /* ── chip 拖拽：拖到别的卡改挂，拖到空白成浮卡（FR-22 / FR-23） ──
      早期 chip 上没有任何拖动逻辑（浮卡能力不可达），moveCast 也没有调用点。 */
@@ -750,8 +855,8 @@ export default function OutlineAxis() {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
-      const x = up.clientX - rect.left - 30;
-      const y = up.clientY - rect.top - 14;
+      const x = toCanvasX(up.clientX, rect.left) - 30;
+      const y = toCanvasY(up.clientY, rect.top) - 14;
       if (x < 0 || y < 0) return; // 拖出画布 = 取消，归属不变
       void setCastPosition(cast.eventId, cast.entityId, x, y);
     };
@@ -934,8 +1039,8 @@ export default function OutlineAxis() {
       const step = edge === "l" || edge === "r" ? STEP : rowPitch;
       const delta =
         edge === "l" || edge === "r"
-          ? Math.round((move.clientX - startX) / step)
-          : Math.round((move.clientY - startY) / step);
+          ? Math.round((move.clientX - startX) / zoom / step)
+          : Math.round((move.clientY - startY) / zoom / step);
       if (delta !== 0) moved = true;
       let from = baseFrom;
       let to = baseTo;
@@ -1160,18 +1265,25 @@ export default function OutlineAxis() {
       (max, event) => Math.max(max, layout.get(event.id)?.stackIdx ?? 0),
       0,
     );
-    const label =
-      editingZone === zone.id ? (
-        <InlineInput
-          initial={zone.name}
-          maxLength={20}
-          width={110}
-          onCommit={(value) => {
-            setEditingZone(null);
-            if (value) void patchZone(zone.id, { name: value });
-          }}
-        />
-      ) : (
+    const editing = editingZone === zone.id;
+    const depth = Math.min(zoneDepth.get(zone.id) ?? 0, ZONE_NEST_MAX);
+    // 外层框上移、内层框贴卡：lift 与「被几个区域包住」相反（最大嵌套的在内层不动）
+    const lift =
+      Math.max(0, (zoneNestByLane.get(zone.laneId) ?? 0) - depth) *
+      ZONE_NEST_STEP;
+    const label = editing ? (
+      <InlineInput
+        initial={zone.name}
+        maxLength={20}
+        width={120}
+        bare
+        placeholder="输入区域名称"
+        onCommit={(value) => {
+          setEditingZone(null);
+          if (value) void patchZone(zone.id, { name: value });
+        }}
+      />
+    ) : (
         <>
           <span className="ol-band__name">{zone.name || "未命名区域"}</span>
           <span
@@ -1195,7 +1307,7 @@ export default function OutlineAxis() {
         </>
       );
     const labelProps = {
-      className: "ol-band__label",
+      className: `ol-band__label${editing ? " is-editing" : ""}`,
       onDoubleClick: () => setEditingZone(zone.id),
       // 设计稿：区域标签右键＝样式浮层（形状 / 线条 / 填充 / 颜色 / 删除）
       onContextMenu: (e: React.MouseEvent<HTMLSpanElement>) => {
@@ -1217,9 +1329,16 @@ export default function OutlineAxis() {
               left: GUTTER + firstSlot * STEP + 5,
               width: (lastSlot - firstSlot + 1) * STEP - 10,
               // 顶部从行内留白里起（设计稿 band top:52）：比卡顶高 6px，
-              // 标签贴在框顶上方，不压轨道标题 / 时代带
-              top: (laneBands[li] ?? fallbackBand).top + ROW_TOP - 6,
-              height: (stackMax + 1) * cardH + stackMax * STACK_GAP + 12,
+              // 标签贴在框顶上方，不压轨道标题 / 时代带；
+              // 嵌套区域外层框逐级上移（底边不动、框体向上长），
+              // 内层的标签页和边线才有地方露出来
+              top:
+                (laneBands[li] ?? fallbackBand).top + ROW_TOP - 6 - lift,
+              height:
+                (stackMax + 1) * cardH +
+                stackMax * STACK_GAP +
+                12 +
+                lift,
               "--zc": color,
             } as React.CSSProperties
           }
@@ -1235,26 +1354,36 @@ export default function OutlineAxis() {
     }
     const maxN = Math.max(...perSlot.values());
     const bandWidth = Math.min(V_COL_W, maxN * EV_W + (maxN - 1) * 8 + 16);
-    // 右侧可用空间不足 110px 时标签收回框内，避免压住邻列
-    const innerLabel = V_COL_W + V_COL_GAP / 2 - bandWidth < 110;
+    const colX = li * (V_COL_W + V_COL_GAP);
+    // 嵌套外扩向右伸展（列内本就有富余；左侧是时代带/邻列，借了会压上去），
+    // 并截断在列宽 + 列间距的可用空间内，不盖到邻列卡片上
+    const grow = Math.min(lift, V_COL_W + V_COL_GAP - 12 - bandWidth);
+    const width = bandWidth + Math.max(0, grow);
+    // 标签挂在框右缘外侧，右侧剩余空间不足 110px 时改挂框顶上方
+    const innerLabel = V_COL_W + V_COL_GAP - width < 110;
     return (
       <div
         key={zone.id}
         className={`ol-band is-vt ${shape}`}
         style={
           {
-            left: li * (V_COL_W + V_COL_GAP) - 8,
-            width: bandWidth,
-            top: V_SLOTS_TOP + firstSlot * rowPitch + 5,
+            // 左缘贴列左缘：不再向左外扩伸进时代带（截图红框问题）
+            left: colX,
+            width,
+            // 外层框逐级上移（底边贴最后一张卡不动、框体向上长）：
+            // 各层标签页贴各自框顶，纵向天然错开成「文件标签」一串，
+            // 首槽时最高上探 48px，正好落在列头下方的 56px 标签留白带里
+            top: V_SLOTS_TOP + firstSlot * rowPitch + 5 - lift,
             // 底边贴最后一张卡的下缘 + 8px（设计稿按实际卡堆收包，不用槽高近似）
-            height: (lastSlot - firstSlot) * rowPitch + V_SLOT_PAD + cardH + 8,
+            height:
+              (lastSlot - firstSlot) * rowPitch + V_SLOT_PAD + cardH + 8 + lift,
             "--zc": color,
           } as React.CSSProperties
         }
       >
         <span
           {...labelProps}
-          className={`ol-band__label${innerLabel ? " is-inner" : ""}`}
+          className={`ol-band__label${innerLabel ? " is-inner" : ""}${editing ? " is-editing" : ""}`}
         >
           {label}
         </span>
@@ -1363,7 +1492,7 @@ export default function OutlineAxis() {
       // 换算扣除 GUTTER 偏移：点击列 = 新段起始格（默认 2 格）
       const col = Math.max(
         0,
-        Math.floor((e.clientX - rect.left - GUTTER) / STEP),
+        Math.floor((toCanvasX(e.clientX, rect.left) - GUTTER) / STEP),
       );
       setMenu({
         x: e.clientX,
@@ -1417,6 +1546,8 @@ export default function OutlineAxis() {
           style={{
             width: GUTTER + slotCount * STEP + 80,
             minHeight: hCanvasHeight,
+            // CSS zoom（Chromium）：布局与滚动条随之缩放，滚动容器无需自算 sizer
+            zoom,
           }}
         >
           <div
@@ -1502,6 +1633,7 @@ export default function OutlineAxis() {
             casts={floatCasts}
             entities={entities}
             boxes={cardBoxes}
+            zoom={zoom}
             onMove={(eventId, entityId, x, y) =>
               void setCastPosition(eventId, entityId, x, y)
             }
@@ -1521,7 +1653,7 @@ export default function OutlineAxis() {
           />
         </div>
       ) : (
-        <div className="ol-vwrap">
+        <div className="ol-vwrap" style={{ zoom }}>
           {renderEraRail(vColsHeight)}
           <div
             className="ol-vcols"
@@ -1566,6 +1698,7 @@ export default function OutlineAxis() {
               casts={floatCasts}
               entities={entities}
               boxes={cardBoxes}
+              zoom={zoom}
               onMove={(eventId, entityId, x, y) =>
                 void setCastPosition(eventId, entityId, x, y)
               }
@@ -1599,9 +1732,19 @@ export default function OutlineAxis() {
           const posinset =
             laneChain.findIndex((item) => item.id === dragEvent.id) + 1;
           // 整卡跟手（设计稿 .ev-wrap.moving）：复用卡片本体，视觉与原位完全一致，
-          // 不另造一个简化幽灵——尺寸/内容/chip 折行都自然对齐
+          // 不另造一个简化幽灵——尺寸/内容/chip 折行都自然对齐。
+          // ghost 是 fixed 定位、渲染在 zoom 容器外，不会随画布缩放——
+          // 用 transform: scale 补上（left/top 不受 transform 影响，跟随逻辑无需换算）
           return (
-            <div className="ol-dragghost" ref={ghostRef} aria-hidden>
+            <div
+              className="ol-dragghost"
+              ref={ghostRef}
+              aria-hidden
+              style={{
+                transform: `scale(${zoom})`,
+                transformOrigin: "top left",
+              }}
+            >
               <EventCard
                 event={dragEvent}
                 chainNumber={chainNo.get(dragEvent.id) ?? 1}
@@ -1701,12 +1844,19 @@ export default function OutlineAxis() {
         )}
       </Modal>
 
-      {/* chip 拖拽幽灵：跟手的一枚浮卡（设计稿 .fcard.dragging） */}
+      {/* chip 拖拽幽灵：跟手的一枚浮卡（设计稿 .fcard.dragging）。
+          fixed 在 zoom 容器外不随画布缩放，用 transform 补上（left/top 不受
+          transform 影响，跟随逻辑无需换算） */}
       {castGhost && (
         <div
           ref={castGhostRef}
           className="ol-fcard is-ghost"
-          style={{ left: castGhost.x - 16, top: castGhost.y - 15 }}
+          style={{
+            left: castGhost.x - 16,
+            top: castGhost.y - 15,
+            transform: `scale(${zoom})`,
+            transformOrigin: "top left",
+          }}
         >
           <span
             className="ol-fcard__av"
@@ -1757,6 +1907,7 @@ function FloatLayer({
   casts,
   entities,
   boxes,
+  zoom,
   onMove,
   onDropTarget,
   onDrop,
@@ -1765,6 +1916,8 @@ function FloatLayer({
   entities: OutlineEntityDTO[];
   /** 事件卡矩形（与画布渲染同源）：牵线端点、避让都按它算 */
   boxes: Map<string, Box>;
+  /** 画布缩放：拖动位移是屏幕像素，回写画布坐标前要除掉 */
+  zoom: number;
   onMove: (eventId: string, entityId: string, x: number, y: number) => void;
   /** 拖动经过事件卡：回传落点（父层据此高亮目标卡、让源 chip 淡出） */
   onDropTarget: (
@@ -1861,8 +2014,8 @@ function FloatLayer({
         finish(false);
         return;
       }
-      const dx = move.clientX - startX;
-      const dy = move.clientY - startY;
+      const dx = (move.clientX - startX) / zoom;
+      const dy = (move.clientY - startY) / zoom;
       if (!moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
       if (!moved) setDraggingKey(keyOf(cast));
       moved = true;

@@ -844,6 +844,8 @@ export interface OutlineProjectDTO {
   /** null = 草稿态（大纲先行）；非空 = 已绑定作品（一作品一份大纲） */
   workId: string | null
   updatedAt: number
+  /** 事件数（project-list 附带，书架快捷入口用；其余装载路径为 0） */
+  eventCount: number
 }
 
 export interface OutlineLaneDTO {

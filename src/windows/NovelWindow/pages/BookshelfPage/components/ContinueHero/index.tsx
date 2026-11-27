@@ -1,5 +1,5 @@
-import { CaretRightOutlined } from "@ant-design/icons";
-import { Button } from "antd";
+import { CaretRightOutlined, UnorderedListOutlined } from "@ant-design/icons";
+import { Button, Tooltip } from "antd";
 import { TODAY_ADDED_LABEL, WORD_UNIT } from "@/shared/novel/today-stats";
 import { formatThousands } from "@/shared/utils/format";
 import { coverPaletteOf, type HeroView } from "../../bookshelf-utils";
@@ -11,6 +11,10 @@ interface ContinueHeroProps {
   dailyGoal: number;
   /** 继续写作：带着位置记忆直接回到编辑器原位 */
   onContinue: () => void;
+  /** 该作品已绑定的大纲摘要（null = 未绑定，不显示快捷入口） */
+  outline: { name: string; eventCount: number } | null;
+  /** 打开该作品已绑定的大纲工作台 */
+  onOpenOutline: () => void;
 }
 
 /**
@@ -22,6 +26,8 @@ export default function ContinueHero({
   todayWords,
   dailyGoal,
   onContinue,
+  outline,
+  onOpenOutline,
 }: ContinueHeroProps) {
   const palette = coverPaletteOf(hero.workId);
   const initial = hero.workName.trim().charAt(0) || "书";
@@ -66,15 +72,35 @@ export default function ContinueHero({
         </div>
       </div>
 
-      <Button
-        type="primary"
-        size="large"
-        className="bs-hero__cta"
-        icon={<CaretRightOutlined />}
-        onClick={onContinue}
-      >
-        继续写作
-      </Button>
+      <span className="bs-hero__actions">
+        <Button
+          type="primary"
+          size="large"
+          className="bs-hero__cta"
+          icon={<CaretRightOutlined />}
+          onClick={onContinue}
+        >
+          继续写作
+        </Button>
+        {outline && (
+          <Tooltip
+            title={`打开「${outline.name || "未命名大纲"}」· 已记录 ${outline.eventCount} 个事件`}
+          >
+            <Button
+              size="large"
+              className="bs-hero__outline"
+              icon={<UnorderedListOutlined />}
+              onClick={onOpenOutline}
+              aria-label={`打开《${hero.workName}》已绑定的大纲`}
+            >
+              大纲
+              <span className="bs-hero__outline-count">
+                {outline.eventCount} 个事件
+              </span>
+            </Button>
+          </Tooltip>
+        )}
+      </span>
     </section>
   );
 }

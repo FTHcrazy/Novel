@@ -40,6 +40,8 @@ interface OutlineProjectRow {
   deleted_at: number | null;
   created_at: number;
   updated_at: number;
+  /** project-list 的 JOIN 附加列；其余查询无此列 → mapProject 兜底 0 */
+  event_count?: number;
 }
 
 interface OutlineLaneRow {
@@ -125,6 +127,8 @@ export interface OutlineProjectDTO {
   name: string;
   workId: string | null;
   updatedAt: number;
+  /** 事件数（project-list 附带；其余装载路径为 0） */
+  eventCount: number;
 }
 
 export interface OutlineLaneDTO {
@@ -294,6 +298,7 @@ const mapProject = (row: OutlineProjectRow): OutlineProjectDTO => ({
   name: row.name,
   workId: row.work_id,
   updatedAt: row.updated_at,
+  eventCount: row.event_count ?? 0,
 });
 
 const mapLane = (row: OutlineLaneRow): OutlineLaneDTO => ({
@@ -441,10 +446,13 @@ export function registerOutlineHandlers(): void {
   // works = 已绑定作品的大纲（渲染层只取最近 5 部展示）
   ipcMain.handle("novel-outline-project-list", () => {
     if (!isNovelDbReady()) return { drafts: [], works: [] };
+    // 附带每份大纲的事件数：书架「大纲 · N 个事件」快捷入口直接读，不再逐份 load
     const rows = dbAll(
-      `SELECT * FROM novel_outline_projects
-        WHERE deleted_at IS NULL
-        ORDER BY updated_at DESC`,
+      `SELECT p.*, (SELECT COUNT(*) FROM novel_outline_events e
+                    WHERE e.project_id = p.id) AS event_count
+       FROM novel_outline_projects p
+       WHERE p.deleted_at IS NULL
+       ORDER BY p.updated_at DESC`,
     ) as OutlineProjectRow[];
     const all = rows.map(mapProject);
     return {

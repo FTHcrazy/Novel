@@ -488,7 +488,7 @@
   &__label {
     position: absolute;
     bottom: calc(100% + 1px);
-    left: -1px;
+    left: 12px;
     z-index: 7;
     box-sizing: border-box;
     height: 20px;
@@ -552,6 +552,28 @@
     background: var(--app-error-weak);
     color: var(--app-error);
   }
+
+  /* 编辑态：标签页边线转实，提示「正在这里输入」，输入框以 .ol-inline-bare 嵌入 */
+  &__label.is-editing {
+    border-style: solid;
+  }
+}
+
+/* 就地改名的无边框小输入（区域标签页内嵌）：尺寸贴住 20px 标签页，
+   不再溢出压住 band 虚线框；加高特异性压掉 antd 的 focus 描边 */
+span.ol-band__label .ol-inline-bare.ant-input,
+span.ol-band__label .ol-inline-bare.ant-input:focus,
+span.ol-band__label .ol-inline-bare.ant-input.ant-input-focused {
+  height: 18px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
 }
 
 /* ── 浮卡层 ── */
@@ -795,14 +817,17 @@
   }
 }
 
-/* 纵向区域标签：右侧放不下时收回框内 */
+/* 纵向区域标签：框右缘外侧放不下时改挂框顶上方（同横向），不塞进框内压卡片。
+   嵌套时各层框顶已错开（外层逐级上移），标签跟着框顶天然分层不重叠 */
 .ol-band.is-vt .ol-band__label.is-inner {
-  left: 8px;
-  top: 4px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  max-width: calc(100% - 16px);
+  top: auto;
+  bottom: calc(100% + 1px);
+  left: 12px;
+  border: 1px solid color-mix(in srgb, var(--zc) 55%, transparent);
+  border-bottom: 0;
+  border-radius: 5px 5px 0 0;
+  background: var(--app-surface-elevated);
+  max-width: 196px;
 }
 
 /* 「改长度…」弹框：起点 + 共几格（最小 1） */

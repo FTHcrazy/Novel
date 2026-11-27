@@ -260,4 +260,43 @@
     color: var(--app-text-muted);
     white-space: nowrap;
   }
+
+  /* 网格卡底部行：更新时间 + 已绑定大纲快捷入口两端对齐 */
+  &__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  /* 大纲快捷入口：胶囊 pill（卡本体是 Button，入口用 span[role=button] 防非法嵌套） */
+  &__outline {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-pill);
+    font-size: 12px;
+    color: var(--app-text-secondary);
+    cursor: pointer;
+    user-select: none;
+    transition:
+      color var(--app-t-fast) var(--app-ease-standard),
+      border-color var(--app-t-fast) var(--app-ease-standard),
+      background-color var(--app-t-fast) var(--app-ease-standard);
+
+    &:hover {
+      color: var(--app-primary);
+      border-color: var(--app-primary);
+      background: var(--app-primary-weak);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--app-primary);
+      outline-offset: 2px;
+    }
+  }
 }

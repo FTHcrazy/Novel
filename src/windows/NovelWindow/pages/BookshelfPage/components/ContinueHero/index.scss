@@ -97,8 +97,26 @@
     white-space: nowrap;
   }
 
+  &__actions {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
   &__cta {
     flex: none;
+  }
+
+  /* 大纲快捷入口：次级按钮 + 事件数弱化尾注（设计稿 hero 卡「大纲 · N 个事件」） */
+  &__outline {
+    flex: none;
+  }
+
+  &__outline-count {
+    margin-left: 2px;
+    font-size: 12px;
+    color: var(--app-text-secondary);
   }
 
   /* 最小窗口：Hero 与统计条、书架头同处一屏，纵向留白要跟着收一档，

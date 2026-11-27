@@ -277,7 +277,7 @@ export default function NovelWindowApp() {
                 visible={view === "shelf" && shelfScreen === "main"}
                 onOpenWork={openWork}
                 onOpenTrash={openTrash}
-                onOpenOutline={() => openOutline()}
+                onOpenOutline={(workId) => openOutline(workId)}
                 importRequest={importRequest}
                 onImportRequestConsumed={consumeImportRequest}
               />

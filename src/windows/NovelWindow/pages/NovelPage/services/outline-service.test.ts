@@ -7,7 +7,13 @@ import type { OutlineBundleDTO } from "@/shared/types/electron";
 import { parseOutlineLoadPayload } from "./outline-service";
 
 const BUNDLE: OutlineBundleDTO = {
-  project: { id: "olp-1", name: "测试大纲", workId: null, updatedAt: 1 },
+  project: {
+    id: "olp-1",
+    name: "测试大纲",
+    workId: null,
+    updatedAt: 1,
+    eventCount: 0,
+  },
   lanes: [{ id: "ol-l-1", name: "时间线", note: "", sort: 0 }],
   events: [],
   entities: [],

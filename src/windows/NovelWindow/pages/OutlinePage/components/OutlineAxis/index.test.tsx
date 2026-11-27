@@ -57,7 +57,13 @@ class FakeResizeObserver {
   disconnect(): void {}
 }
 
-const project: OutlineProjectDTO = { id: "p1", name: "草稿", workId: null, updatedAt: 1 };
+const project: OutlineProjectDTO = {
+  id: "p1",
+  name: "草稿",
+  workId: null,
+  updatedAt: 1,
+  eventCount: 0,
+};
 
 const event = (id: string, slot: number, title: string): OutlineEventDTO => ({
   id,

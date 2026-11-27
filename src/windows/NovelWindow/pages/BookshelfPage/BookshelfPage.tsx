@@ -22,6 +22,7 @@ import { useBookshelfData } from "./hooks/useBookshelfData";
 import { useShelfWorkActions } from "./hooks/useShelfWorkActions";
 import { useBookImport } from "./hooks/useBookImport";
 import { listTrash } from "../NovelPage/services/novel-service";
+import { fetchOutlineProjects } from "../NovelPage/services/outline-service";
 import NovelGuideTour from "../../components/NovelGuideTour";
 import { useGuideStore } from "../../store/useGuideStore";
 import {
@@ -56,8 +57,8 @@ interface BookshelfPageProps {
    * 销毁」需要横向空间，弹窗里只能靠省略号过日子。备份 / 恢复仍留在弹窗。
    */
   onOpenTrash: () => void;
-  /** 打开大纲工作台（书架顶栏入口，outline-plan-spec v7.1 §7.1） */
-  onOpenOutline: () => void;
+  /** 打开大纲工作台（workId 缺省 = 最近草稿；带 workId = 直达该作品已绑定的大纲） */
+  onOpenOutline: (workId?: string) => void;
   /**
    * 编辑器空书架空态的「导入书籍」请求（幂等 token）：收到后在本页发起选文件
    * 导入。导入的实现（选文件 → worker 解析 → 落库）只在这里有一份，
@@ -281,6 +282,33 @@ export default function BookshelfPage({
     [cards, status, keyword, sortKey],
   );
 
+  /**
+   * 已绑定大纲快捷入口（workId → 大纲摘要）：书架可见时拉一次 project-list，
+   * 失败静默归空 —— 快捷入口是锦上添花，不因它报错打扰书架。
+   */
+  const [outlineByWork, setOutlineByWork] = useState<
+    Map<string, { name: string; eventCount: number }>
+  >(new Map());
+  useEffect(() => {
+    if (!visible) return;
+    let alive = true;
+    fetchOutlineProjects()
+      .then((list) => {
+        if (!alive) return;
+        const map = new Map<string, { name: string; eventCount: number }>();
+        for (const item of list.works) {
+          if (item.workId) {
+            map.set(item.workId, { name: item.name, eventCount: item.eventCount });
+          }
+        }
+        setOutlineByWork(map);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [visible]);
+
   const visibleNotes = useMemo(
     () => sortIdeaNotes(filterIdeaNotes(notes, ideaFilter, keyword)),
     [notes, ideaFilter, keyword],
@@ -468,6 +496,8 @@ export default function BookshelfPage({
               todayWords={usage.todayWords}
               dailyGoal={style.dailyGoal}
               onContinue={handleContinue}
+              outline={outlineByWork.get(hero.workId) ?? null}
+              onOpenOutline={() => onOpenOutline(hero.workId)}
             />
           )}
 
@@ -513,6 +543,8 @@ export default function BookshelfPage({
                   view={viewMode}
                   onOpen={openWorkCard}
                   onContextMenu={(x, y) => workMenu.openMenu(card.id, x, y)}
+                  outline={outlineByWork.get(card.id) ?? null}
+                  onOpenOutline={() => onOpenOutline(card.id)}
                 />
               ))}
               <NewWorkCard

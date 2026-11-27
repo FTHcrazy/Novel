@@ -1,6 +1,6 @@
-import { Button } from "antd";
-import { RightOutlined } from "@ant-design/icons";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import { Button, Tooltip } from "antd";
+import { RightOutlined, UnorderedListOutlined } from "@ant-design/icons";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import {
   coverPaletteOf,
   formatDayLabel,
@@ -17,6 +17,10 @@ interface BookCardProps {
   onOpen: (workId: string) => void;
   /** 右键书卡：由页面把「哪本书 + 光标在哪」交给作品操作菜单 */
   onContextMenu?: (x: number, y: number) => void;
+  /** 该作品已绑定的大纲摘要（null = 未绑定，不显示快捷入口） */
+  outline?: { name: string; eventCount: number } | null;
+  /** 打开该作品已绑定的大纲工作台 */
+  onOpenOutline?: () => void;
 }
 
 /**
@@ -32,13 +36,31 @@ interface BookCardProps {
  * 右缘「更新时间 + 箭头」尾随区，扫读时视线不用跳。题材在网格里单独一行、
  * 在列表里并进 meta 行——列表行高是硬约束（多一行就让平铺的几十本变笨重）。
  */
-export default function BookCard({ card, view, onOpen, onContextMenu }: BookCardProps) {
+export default function BookCard({
+  card,
+  view,
+  onOpen,
+  onContextMenu,
+  outline,
+  onOpenOutline,
+}: BookCardProps) {
   const palette = coverPaletteOf(card.id);
   const initial = card.name.trim().charAt(0) || "书";
   const handleContextMenu = (event: ReactMouseEvent<HTMLElement>): void => {
     // 书架是桌面应用：右键不该冒出 Electron 默认的「检查元素」菜单
     event.preventDefault();
     onContextMenu?.(event.clientX, event.clientY);
+  };
+  /** 卡内大纲快捷入口：卡本体也是 Button，入口用 span[role=button] 防嵌套 button 的非法 HTML */
+  const handleOutlineClick = (event: ReactMouseEvent<HTMLElement>): void => {
+    event.stopPropagation();
+    onOpenOutline?.();
+  };
+  const handleOutlineKeyDown = (event: ReactKeyboardEvent<HTMLElement>): void => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    onOpenOutline?.();
   };
   const updatedText = card.updatedAt
     ? `${formatDayLabel(card.updatedAt)}更新`
@@ -83,6 +105,23 @@ export default function BookCard({ card, view, onOpen, onContextMenu }: BookCard
     </span>
   );
 
+  const outlinePill =
+    outline && onOpenOutline ? (
+      <Tooltip title={`打开「${outline.name || "未命名大纲"}」· 已记录 ${outline.eventCount} 个事件`}>
+        <span
+          className="bs-card__outline"
+          role="button"
+          tabIndex={0}
+          aria-label={`打开《${card.name}》已绑定的大纲`}
+          onClick={handleOutlineClick}
+          onKeyDown={handleOutlineKeyDown}
+        >
+          <UnorderedListOutlined aria-hidden />
+          <span>大纲</span>
+        </span>
+      </Tooltip>
+    ) : null;
+
   if (view === "list") {
     return (
       <Button
@@ -124,7 +163,10 @@ export default function BookCard({ card, view, onOpen, onContextMenu }: BookCard
         <span className="bs-card__meta">
           {formatWordsCompact(card.totalWords)}字 · {card.chapterCount} 章
         </span>
-        <span className="bs-card__updated">{updatedText}</span>
+        <span className="bs-card__foot">
+          <span className="bs-card__updated">{updatedText}</span>
+          {outlinePill}
+        </span>
       </span>
     </Button>
   );

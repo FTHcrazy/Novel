@@ -45,14 +45,20 @@ vi.mock("../../NovelPage/services/outline-service", () => ({
 import {
   fetchOutlineBundle,
   fetchOutlineProjects,
+  saveOutlineEra,
 } from "../../NovelPage/services/outline-service";
-import { resetOutlineStore, useOutlineStore } from "./useOutlineStore";
+import {
+  PLACEHOLDER_ERA_ID,
+  resetOutlineStore,
+  useOutlineStore,
+} from "./useOutlineStore";
 
 const project = (id: string, workId: string | null): OutlineProjectDTO => ({
   id,
   name: id,
   workId,
   updatedAt: 1,
+  eventCount: 0,
 });
 
 const event = (
@@ -192,8 +198,78 @@ describe("addEraNextTo：新增段不得与邻段重叠", () => {
   });
 });
 
-describe("addEraAt：时间条空白按列新增", () => {
-  it("默认 2 格、返回新段 id，并让原有段让位", async () => {
+describe("patchEra：纯改名也要落库", () => {
+  it("只改名字（区间不变）同样调用 saveOutlineEra，名字不随重启回退", async () => {
+    useOutlineStore.setState({
+      project: project("p1", null),
+      lanes: [{ id: "l1", name: "", note: "", sort: 0 }],
+      events: [],
+      eras: [era("era1", 0, 1)],
+      zones: [],
+      casts: [],
+      entities: [],
+    });
+    vi.mocked(saveOutlineEra).mockClear();
+
+    await useOutlineStore.getState().patchEra("era1", { name: "第一卷" });
+
+    expect(
+      useOutlineStore.getState().eras.find((item) => item.id === "era1")?.name,
+    ).toBe("第一卷");
+    expect(saveOutlineEra).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "era1", name: "第一卷", projectId: "p1" }),
+    );
+  });
+});
+
+describe("addEraNextTo：占位段（空白大纲首段）邻接新增", () => {
+  it("先转正占位段再贴着新增：原领地保留，两段都落库", async () => {
+    useOutlineStore.setState({
+      project: project("p1", null),
+      lanes: [{ id: "l1", name: "", note: "", sort: 0 }],
+      events: [],
+      eras: [
+        {
+          id: PLACEHOLDER_ERA_ID,
+          name: "",
+          note: "",
+          colorSlot: "",
+          fromSlot: 0,
+          toSlot: 2,
+          sort: 0,
+        },
+      ],
+      zones: [],
+      casts: [],
+      entities: [],
+    });
+    vi.mocked(saveOutlineEra).mockClear();
+
+    const newId = await useOutlineStore
+      .getState()
+      .addEraNextTo(PLACEHOLDER_ERA_ID, false);
+    expect(newId).toBeTruthy();
+
+    const eras = useOutlineStore.getState().eras;
+    // 占位段已转正成真实段，原 3 格领地保留（不被新段顶替吞掉）
+    const promoted = eras.find(
+      (item) => item.id !== PLACEHOLDER_ERA_ID && item.id !== newId,
+    );
+    expect(promoted).toMatchObject({ fromSlot: 0, toSlot: 2 });
+    // 新段紧贴其后
+    const created = eras.find((item) => item.id === newId);
+    expect(created).toMatchObject({ fromSlot: 3, toSlot: 3 });
+    // 两段都落库（转正 + 新增各一次）
+    expect(saveOutlineEra).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: "p1", fromSlot: 0, toSlot: 2 }),
+    );
+    expect(saveOutlineEra).toHaveBeenCalledWith(
+      expect.objectContaining({ id: newId, projectId: "p1" }),
+    );
+  });
+});
+
+describe("addEraAt：时间条空白按列新增", () => {  it("默认 2 格、返回新段 id，并让原有段让位", async () => {
     useOutlineStore.setState({
       project: project("p1", null),
       lanes: [{ id: "l1", name: "", note: "", sort: 0 }],
@@ -216,6 +292,31 @@ describe("addEraAt：时间条空白按列新增", () => {
     for (let index = 1; index < eras.length; index += 1) {
       expect(eras[index].fromSlot).toBeGreaterThan(eras[index - 1].toSlot);
     }
+  });
+});
+
+describe("createZoneFromPair：默认色轮换", () => {
+  it("连续框两个区域，默认色从色槽交替取值（不再清一色 teal）", async () => {
+    useOutlineStore.setState({
+      project: project("p1", null),
+      lanes: [{ id: "l1", name: "", note: "", sort: 0 }],
+      events: [event("e1", "l1", 0), event("e2", "l1", 2), event("e3", "l1", 5)],
+      eras: [],
+      zones: [],
+      casts: [],
+      entities: [],
+    });
+
+    const { createZoneFromPair } = useOutlineStore.getState();
+    await createZoneFromPair("e1", "e2");
+    await createZoneFromPair("e2", "e3");
+
+    const zones = useOutlineStore.getState().zones;
+    expect(zones).toHaveLength(2);
+    expect(zones[0].colorSlot).toBeTruthy();
+    expect(zones[0].colorSlot).not.toBe(zones[1].colorSlot);
+    // 区间归一：a/b 乱序传入也取 min..max
+    expect(zones[1]).toMatchObject({ fromSlot: 2, toSlot: 5 });
   });
 });
 

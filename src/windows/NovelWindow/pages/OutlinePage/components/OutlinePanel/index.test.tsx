@@ -44,7 +44,13 @@ vi.mock("../../NovelPage/services/outline-service", () => ({
 import { resetOutlineStore, useOutlineStore } from "../../store/useOutlineStore";
 import OutlinePanel from "./index";
 
-const project: OutlineProjectDTO = { id: "p1", name: "p1", workId: null, updatedAt: 1 };
+const project: OutlineProjectDTO = {
+  id: "p1",
+  name: "p1",
+  workId: null,
+  updatedAt: 1,
+  eventCount: 0,
+};
 
 const lane: OutlineLaneDTO = { id: "l1", name: "主线", note: "", sort: 0 };
 
